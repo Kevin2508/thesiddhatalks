@@ -122,4 +122,88 @@ class YouTubeService {
       throw Exception('Error fetching latest videos: $e');
     }
   }
+
+  // ADD THESE MISSING METHODS:
+
+  // Get channel uploads (all videos from uploads playlist)
+  Future<List<YouTubeVideo>> getChannelUploads({int maxResults = 20}) async {
+    try {
+      // First get the uploads playlist ID
+      final channelUrl = Uri.parse(
+          '$_baseUrl/channels?part=contentDetails&id=$_channelId&key=$_apiKey'
+      );
+
+      final channelResponse = await http.get(channelUrl);
+
+      if (channelResponse.statusCode == 200) {
+        final channelData = json.decode(channelResponse.body);
+        final items = channelData['items'] as List?;
+
+        if (items != null && items.isNotEmpty) {
+          final uploadsPlaylistId = items.first['contentDetails']['relatedPlaylists']['uploads'] as String;
+
+          // Now get videos from uploads playlist
+          return await getPlaylistVideos(uploadsPlaylistId, maxResults: maxResults);
+        }
+      }
+
+      // Fallback to search if uploads playlist not found
+      return await getLatestVideos(maxResults: maxResults);
+    } catch (e) {
+      // Fallback to latest videos if uploads playlist fails
+      return await getLatestVideos(maxResults: maxResults);
+    }
+  }
+
+  // Get channel information
+  Future<Map<String, dynamic>?> getChannelInfo() async {
+    try {
+      final url = Uri.parse(
+          '$_baseUrl/channels?part=snippet,statistics&id=$_channelId&key=$_apiKey'
+      );
+
+      final response = await http.get(url);
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final items = data['items'] as List?;
+
+        if (items != null && items.isNotEmpty) {
+          final channel = items.first;
+          return {
+            'id': channel['id'],
+            'title': channel['snippet']['title'],
+            'description': channel['snippet']['description'],
+            'subscriberCount': channel['statistics']['subscriberCount'],
+            'videoCount': channel['statistics']['videoCount'],
+            'thumbnail': channel['snippet']['thumbnails']['high']['url'],
+          };
+        }
+      }
+      return null;
+    } catch (e) {
+      print('Error getting channel info: $e');
+      return null;
+    }
+  }
+
+  // Get videos by category (helper method)
+  Future<List<YouTubeVideo>> getVideosByCategory(String category, {int maxResults = 10}) async {
+    try {
+      if (category == 'All') {
+        return await getChannelUploads(maxResults: maxResults);
+      }
+
+      // Search for videos in the category
+      final keywords = VideoCategory.categoryKeywords[category] ?? [];
+      if (keywords.isNotEmpty) {
+        final query = keywords.join(' OR ');
+        return await searchChannelVideos(query, maxResults: maxResults);
+      }
+
+      return await getChannelUploads(maxResults: maxResults);
+    } catch (e) {
+      throw Exception('Error fetching videos by category: $e');
+    }
+  }
 }

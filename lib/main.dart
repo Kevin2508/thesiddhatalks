@@ -1,352 +1,282 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:thesiddhatalks/screens/player_screen.dart';
-import '../utils/app_colors.dart';
-import '../models/youtube_models.dart';
-import '../services/youtube_service.dart';
-import '../widgets/youtube_playlist_carousel.dart';
+import 'screens/splash_screen.dart';
+import 'screens/home_screen.dart';
+import 'screens/player_screen.dart';
+import 'screens/wisdom_screen.dart';
+import 'screens/explore_screen.dart';
+import 'utils/app_colors.dart';
+import 'models/youtube_models.dart';
 
-class ExploreScreen extends StatefulWidget {
-  const ExploreScreen({Key? key}) : super(key: key);
+void main() {
+  WidgetsFlutterBinding.ensureInitialized();
 
-  @override
-  State<ExploreScreen> createState() => _ExploreScreenState();
+  // Set preferred orientations for better UX
+  SystemChrome.setPreferredOrientations([
+    DeviceOrientation.portraitUp,
+    DeviceOrientation.portraitDown,
+    DeviceOrientation.landscapeLeft, // Allow landscape for video player
+    DeviceOrientation.landscapeRight,
+  ]);
+
+  // Set system UI overlay style
+  SystemChrome.setSystemUIOverlayStyle(
+    const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.dark,
+      systemNavigationBarColor: Colors.white,
+      systemNavigationBarIconBrightness: Brightness.dark,
+    ),
+  );
+
+  runApp(const SiddhaTalkApp());
 }
 
-class _ExploreScreenState extends State<ExploreScreen>
-    with TickerProviderStateMixin {
-  final TextEditingController _searchController = TextEditingController();
-  final YouTubeService _youtubeService = YouTubeService();
-  late AnimationController _fadeController;
+class SiddhaTalkApp extends StatelessWidget {
+  const SiddhaTalkApp({Key? key}) : super(key: key);
 
-  String _selectedCategory = 'All';
-  List<YouTubeVideo> _allVideos = [];
-  List<YouTubeVideo> _filteredVideos = [];
-  List<PlaylistInfo> _playlists = [];
-  Map<String, List<YouTubeVideo>> _categorizedVideos = {};
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'The Siddha Talks',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        brightness: Brightness.light,
+        scaffoldBackgroundColor: AppColors.primaryBackground,
+        primaryColor: AppColors.primaryAccent,
+        colorScheme: const ColorScheme.light(
+          primary: AppColors.primaryAccent,
+          secondary: AppColors.secondaryAccent,
+          surface: AppColors.surfaceBackground,
+          background: AppColors.primaryBackground,
+          onPrimary: Colors.white,
+          onSecondary: Colors.white,
+          onSurface: AppColors.textPrimary,
+          onBackground: AppColors.textPrimary,
+        ),
+        textTheme: TextTheme(
+          headlineLarge: GoogleFonts.teko(
+            color: AppColors.textPrimary,
+            fontWeight: FontWeight.bold,
+            fontSize: 32,
+          ),
+          headlineMedium: GoogleFonts.rajdhani(
+            color: AppColors.textPrimary,
+            fontWeight: FontWeight.bold,
+            fontSize: 24,
+          ),
+          bodyLarge: GoogleFonts.lato(
+            color: AppColors.textPrimary,
+            fontSize: 16,
+          ),
+          bodyMedium: GoogleFonts.lato(
+            color: AppColors.textSecondary,
+            fontSize: 14,
+          ),
+        ),
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          systemOverlayStyle: SystemUiOverlayStyle.dark,
+          iconTheme: IconThemeData(color: AppColors.textPrimary),
+          titleTextStyle: TextStyle(color: AppColors.textPrimary),
+        ),
+        elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppColors.primaryAccent,
+            foregroundColor: Colors.white,
+            elevation: 2,
+            shadowColor: AppColors.shadowMedium,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        ),
+        // Add input decoration theme for consistent search bars
+        inputDecorationTheme: InputDecorationTheme(
+          filled: true,
+          fillColor: AppColors.surfaceBackground,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: BorderSide.none,
+          ),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 20,
+            vertical: 16,
+          ),
+        ),
+        // Add card theme for consistency
+        cardTheme: CardThemeData(
+          color: AppColors.surfaceBackground,
+          elevation: 4,
+          shadowColor: AppColors.shadowLight,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+        ),
+      ),
+      initialRoute: '/',
+      onGenerateRoute: (settings) {
+        switch (settings.name) {
+          case '/':
+            return _createRoute(const SplashScreen());
+          case '/home':
+            return _createRoute(const MainScreen());
+          case '/player':
+            final video = settings.arguments as YouTubeVideo?;
+            return _createRoute(PlayerScreen(video: video));
+          default:
+            return _createRoute(const SplashScreen());
+        }
+      },
+    );
+  }
 
-  bool _isLoading = true;
-  bool _isSearching = false;
-  String? _error;
+  // Custom route transition for smoother navigation
+  Route<dynamic> _createRoute(Widget page) {
+    return PageRouteBuilder(
+      pageBuilder: (context, animation, secondaryAnimation) => page,
+      transitionsBuilder: (context, animation, secondaryAnimation, child) {
+        const begin = Offset(1.0, 0.0);
+        const end = Offset.zero;
+        const curve = Curves.easeInOut;
 
-  final List<String> _categories = [
-    'All',
-    'Meditation',
-    'Philosophy',
-    'Daily Wisdom',
-    'Discourses',
-    'Q&A Sessions',
+        var tween = Tween(begin: begin, end: end).chain(
+          CurveTween(curve: curve),
+        );
+
+        return SlideTransition(
+          position: animation.drive(tween),
+          child: child,
+        );
+      },
+      transitionDuration: const Duration(milliseconds: 300),
+    );
+  }
+}
+
+class MainScreen extends StatefulWidget {
+  const MainScreen({Key? key}) : super(key: key);
+
+  @override
+  State<MainScreen> createState() => _MainScreenState();
+}
+
+class _MainScreenState extends State<MainScreen>
+    with TickerProviderStateMixin, WidgetsBindingObserver {
+  int _currentIndex = 0;
+  late PageController _pageController;
+  late AnimationController _navBarController;
+  late Animation<double> _navBarAnimation;
+
+  final List<Widget> _screens = [
+    const HomeScreen(),
+    const ExploreScreen(),
+    const WisdomScreen(),
+  ];
+
+  final List<String> _screenTitles = [
+    'Home',
+    'Explore',
+    'Wisdom',
   ];
 
   @override
   void initState() {
     super.initState();
-    _fadeController = AnimationController(
-      duration: const Duration(milliseconds: 600),
+    WidgetsBinding.instance.addObserver(this);
+
+    _pageController = PageController();
+    _navBarController = AnimationController(
+      duration: const Duration(milliseconds: 300),
       vsync: this,
     );
 
-    _loadData();
+    _navBarAnimation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(
+      parent: _navBarController,
+      curve: Curves.easeInOut,
+    ));
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        _fadeController.forward();
-      }
-    });
+    // Start navigation bar animation
+    _navBarController.forward();
   }
 
-  Future<void> _loadData() async {
-    try {
-      setState(() {
-        _isLoading = true;
-        _error = null;
-      });
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
 
-      // Load all playlists
-      final playlists = await _youtubeService.getChannelPlaylists();
-
-      // Load all recent uploads
-      final uploads = await _youtubeService.getChannelUploads(maxResults: 50);
-
-      // Categorize videos based on title and description
-      final categorizedVideos = <String, List<YouTubeVideo>>{};
-
-      for (final category in _categories) {
-        if (category == 'All') continue;
-
-        categorizedVideos[category] = uploads.where((video) {
-          final videoCategory = VideoCategory.categorizeVideo(
-              video.title,
-              video.description
-          );
-          return videoCategory == category;
-        }).toList();
-      }
-
-      setState(() {
-        _playlists = playlists;
-        _allVideos = uploads;
-        _categorizedVideos = categorizedVideos;
-        _filteredVideos = uploads;
-        _isLoading = false;
-      });
-    } catch (e) {
-      setState(() {
-        _error = e.toString();
-        _isLoading = false;
-      });
+    // Handle app lifecycle changes for video player
+    if (state == AppLifecycleState.paused) {
+      // App is in background - pause any video playback
+      _pauseVideoPlayback();
+    } else if (state == AppLifecycleState.resumed) {
+      // App is back in foreground
+      _resumeVideoPlayback();
     }
   }
 
-  Future<void> _searchVideos(String query) async {
-    if (query.trim().isEmpty) {
-      _filterContent('');
-      return;
-    }
-
-    setState(() {
-      _isSearching = true;
-    });
-
-    try {
-      final searchResults = await _youtubeService.searchChannelVideos(
-        query,
-        maxResults: 30,
-      );
-
-      setState(() {
-        _filteredVideos = searchResults;
-        _isSearching = false;
-      });
-    } catch (e) {
-      setState(() {
-        _isSearching = false;
-      });
-      // Fall back to local search
-      _filterContent(query);
-    }
+  void _pauseVideoPlayback() {
+    // This will be handled by the YouTube player controller
+    // when the app goes to background
   }
 
-  void _filterContent(String query) {
-    setState(() {
-      if (query.isEmpty && _selectedCategory == 'All') {
-        _filteredVideos = _allVideos;
-      } else {
-        List<YouTubeVideo> videosToFilter = _selectedCategory == 'All'
-            ? _allVideos
-            : _categorizedVideos[_selectedCategory] ?? [];
-
-        if (query.isEmpty) {
-          _filteredVideos = videosToFilter;
-        } else {
-          _filteredVideos = videosToFilter.where((video) {
-            return video.title.toLowerCase().contains(query.toLowerCase()) ||
-                video.description.toLowerCase().contains(query.toLowerCase());
-          }).toList();
-        }
-      }
-    });
+  void _resumeVideoPlayback() {
+    // This will be handled by the YouTube player controller
+    // when the app comes back to foreground
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.primaryBackground,
-      body: SafeArea(
-        child: RefreshIndicator(
-          onRefresh: _loadData,
-          child: Column(
-            children: [
-              // Header
-              _buildHeader(),
-
-              // Category Filter
-              _buildCategoryFilter(),
-
-              const SizedBox(height: 20),
-
-              // Content
-              Expanded(
-                child: _buildContent(),
-              ),
-            ],
-          ),
-        ),
+      body: PageView(
+        controller: _pageController,
+        onPageChanged: (index) {
+          setState(() {
+            _currentIndex = index;
+          });
+          // Provide haptic feedback
+          HapticFeedback.selectionClick();
+        },
+        children: _screens,
       ),
-    );
-  }
-
-  Widget _buildHeader() {
-    return Padding(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Explore',
-                      style: GoogleFonts.teko(
-                        fontSize: 32,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                    Text(
-                      'Discover spiritual teachings and wisdom',
-                      style: GoogleFonts.lato(
-                        fontSize: 16,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              if (_isLoading || _isSearching)
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  child: SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(
-                        AppColors.primaryAccent,
-                      ),
-                    ),
+      bottomNavigationBar: AnimatedBuilder(
+        animation: _navBarAnimation,
+        builder: (context, child) {
+          return Transform.translate(
+            offset: Offset(0, 100 * (1 - _navBarAnimation.value)),
+            child: Container(
+              decoration: BoxDecoration(
+                color: AppColors.surfaceBackground,
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.shadowLight,
+                    blurRadius: 15,
+                    offset: const Offset(0, -5),
+                    spreadRadius: 0,
+                  ),
+                ],
+                border: Border(
+                  top: BorderSide(
+                    color: AppColors.divider,
+                    width: 0.5,
                   ),
                 ),
-            ],
-          ),
-          const SizedBox(height: 20),
-
-          // Search Bar
-          TextField(
-            controller: _searchController,
-            onChanged: (query) {
-              // Debounce search
-              Future.delayed(const Duration(milliseconds: 500), () {
-                if (_searchController.text == query) {
-                  _searchVideos(query);
-                }
-              });
-            },
-            style: GoogleFonts.lato(
-              color: AppColors.textPrimary,
-              fontSize: 16,
-            ),
-            decoration: InputDecoration(
-              hintText: 'Search teachings...',
-              hintStyle: GoogleFonts.lato(
-                color: AppColors.textSecondary,
-                fontSize: 16,
               ),
-              prefixIcon: Icon(
-                Icons.search,
-                color: AppColors.textSecondary,
-              ),
-              suffixIcon: _searchController.text.isNotEmpty
-                  ? IconButton(
-                icon: Icon(
-                  Icons.clear,
-                  color: AppColors.textSecondary,
-                ),
-                onPressed: () {
-                  _searchController.clear();
-                  _filterContent('');
-                },
-              )
-                  : null,
-              filled: true,
-              fillColor: AppColors.surfaceBackground,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(16),
-                borderSide: BorderSide.none,
-              ),
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 20,
-                vertical: 16,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCategoryFilter() {
-    return SizedBox(
-      height: 60,
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 20),
-        physics: const BouncingScrollPhysics(),
-        itemCount: _categories.length,
-        itemBuilder: (context, index) {
-          final category = _categories[index];
-          final isSelected = category == _selectedCategory;
-          final videoCount = category == 'All'
-              ? _allVideos.length
-              : _categorizedVideos[category]?.length ?? 0;
-
-          return Padding(
-            padding: EdgeInsets.only(
-              right: index == _categories.length - 1 ? 0 : 12,
-            ),
-            child: GestureDetector(
-              onTap: () {
-                HapticFeedback.lightImpact();
-                setState(() {
-                  _selectedCategory = category;
-                });
-                _filterContent(_searchController.text);
-              },
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: 12,
-                ),
-                decoration: BoxDecoration(
-                  color: isSelected
-                      ? AppColors.primaryAccent
-                      : AppColors.surfaceBackground,
-                  borderRadius: BorderRadius.circular(25),
-                  border: Border.all(
-                    color: isSelected
-                        ? AppColors.primaryAccent
-                        : Colors.transparent,
-                    width: 1,
-                  ),
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      category,
-                      style: GoogleFonts.lato(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: isSelected
-                            ? Colors.white
-                            : AppColors.textPrimary,
-                      ),
+              child: SafeArea(
+                child: Container(
+                  height: 70,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: List.generate(
+                      _screens.length,
+                          (index) => _buildNavItem(index),
                     ),
-                    if (videoCount > 0)
-                      Text(
-                        '$videoCount',
-                        style: GoogleFonts.lato(
-                          fontSize: 12,
-                          color: isSelected
-                              ? Colors.white70
-                              : AppColors.textSecondary,
-                        ),
-                      ),
-                  ],
+                  ),
                 ),
               ),
             ),
@@ -356,138 +286,70 @@ class _ExploreScreenState extends State<ExploreScreen>
     );
   }
 
-  Widget _buildContent() {
-    if (_error != null) {
-      return _buildErrorWidget();
-    }
+  Widget _buildNavItem(int index) {
+    final isSelected = _currentIndex == index;
+    final icons = [
+      Icons.home_outlined,
+      Icons.explore_outlined,
+      Icons.lightbulb_outline,
+    ];
+    final activeIcons = [
+      Icons.home,
+      Icons.explore,
+      Icons.lightbulb,
+    ];
 
-    if (_isLoading) {
-      return _buildLoadingWidget();
-    }
-
-    return AnimatedBuilder(
-      animation: _fadeController,
-      builder: (context, child) {
-        final opacity = _fadeController.value.clamp(0.0, 1.0);
-
-        return Opacity(
-          opacity: opacity,
-          child: _filteredVideos.isEmpty
-              ? _buildEmptyState()
-              : _buildVideoGrid(),
-        );
+    return GestureDetector(
+      onTap: () {
+        if (_currentIndex != index) {
+          setState(() {
+            _currentIndex = index;
+          });
+          _pageController.animateToPage(
+            index,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeInOut,
+          );
+          HapticFeedback.lightImpact();
+        }
       },
-    );
-  }
-
-  Widget _buildVideoGrid() {
-    return GridView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      physics: const BouncingScrollPhysics(),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        childAspectRatio: 0.75,
-        crossAxisSpacing: 16,
-        mainAxisSpacing: 16,
-      ),
-      itemCount: _filteredVideos.length,
-      itemBuilder: (context, index) {
-        return ExploreVideoCard(
-          video: _filteredVideos[index],
-          animationDelay: index * 50,
-          onTap: () => _playVideo(_filteredVideos[index]),
-        );
-      },
-    );
-  }
-
-  Widget _buildEmptyState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.search_off,
-            size: 64,
-            color: AppColors.textSecondary.withOpacity(0.5),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'No videos found',
-            style: GoogleFonts.rajdhani(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: AppColors.textSecondary,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Try adjusting your search terms\nor exploring different categories',
-            style: GoogleFonts.lato(
-              fontSize: 16,
-              color: AppColors.textSecondary,
-              height: 1.4,
-            ),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 24),
-          ElevatedButton(
-            onPressed: () {
-              _searchController.clear();
-              setState(() {
-                _selectedCategory = 'All';
-              });
-              _filterContent('');
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primaryAccent,
-              foregroundColor: Colors.white,
-            ),
-            child: Text('Show All Videos'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildErrorWidget() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 8,
+        ),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? AppColors.primaryAccent.withOpacity(0.1)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
+        ),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              Icons.error_outline,
-              color: AppColors.error,
-              size: 64,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Failed to load content',
-              style: GoogleFonts.rajdhani(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: AppColors.error,
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 200),
+              child: Icon(
+                isSelected ? activeIcons[index] : icons[index],
+                key: ValueKey(isSelected),
+                size: 28,
+                color: isSelected
+                    ? AppColors.primaryAccent
+                    : AppColors.textSecondary,
               ),
             ),
-            const SizedBox(height: 8),
-            Text(
-              'Please check your internet connection and try again.',
+            const SizedBox(height: 4),
+            AnimatedDefaultTextStyle(
+              duration: const Duration(milliseconds: 200),
               style: GoogleFonts.lato(
-                fontSize: 16,
-                color: AppColors.textSecondary,
+                fontSize: 12,
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                color: isSelected
+                    ? AppColors.primaryAccent
+                    : AppColors.textSecondary,
               ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton(
-              onPressed: _loadData,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primaryAccent,
-                foregroundColor: Colors.white,
-              ),
-              child: Text('Retry'),
+              child: Text(_screenTitles[index]),
             ),
           ],
         ),
@@ -495,274 +357,46 @@ class _ExploreScreenState extends State<ExploreScreen>
     );
   }
 
-  Widget _buildLoadingWidget() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          CircularProgressIndicator(
-            valueColor: AlwaysStoppedAnimation<Color>(AppColors.primaryAccent),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'Loading spiritual content...',
-            style: GoogleFonts.lato(
-              fontSize: 16,
-              color: AppColors.textSecondary,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _playVideo(YouTubeVideo video) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => PlayerScreen(video: video),
-      ),
-    );
-  }
-
   @override
   void dispose() {
-    _fadeController.dispose();
-    _searchController.dispose();
+    WidgetsBinding.instance.removeObserver(this);
+    _pageController.dispose();
+    _navBarController.dispose();
     super.dispose();
   }
 }
 
-class ExploreVideoCard extends StatefulWidget {
-  final YouTubeVideo video;
-  final int animationDelay;
-  final VoidCallback onTap;
+// Global error handler for production
+class AppErrorHandler {
+  static void handleError(Object error, StackTrace stackTrace) {
+    // Log error to analytics service (Firebase Crashlytics, etc.)
+    debugPrint('App Error: $error');
+    debugPrint('Stack Trace: $stackTrace');
 
-  const ExploreVideoCard({
-    Key? key,
-    required this.video,
-    this.animationDelay = 0,
-    required this.onTap,
-  }) : super(key: key);
-
-  @override
-  State<ExploreVideoCard> createState() => _ExploreVideoCardState();
+    // In production, you might want to send this to a crash reporting service
+    // FirebaseCrashlytics.instance.recordError(error, stackTrace);
+  }
 }
 
-class _ExploreVideoCardState extends State<ExploreVideoCard>
-    with TickerProviderStateMixin {
-  late AnimationController _entranceController;
-  late AnimationController _pressController;
-  late Animation<double> _entranceAnimation;
-  late Animation<double> _scaleAnimation;
-  late Animation<double> _slideAnimation;
-  bool _isPressed = false;
+// Custom exception for app-specific errors
+class AppException implements Exception {
+  final String message;
+  final String? code;
+
+  AppException(this.message, [this.code]);
 
   @override
-  void initState() {
-    super.initState();
+  String toString() => 'AppException: $message${code != null ? ' (Code: $code)' : ''}';
+}
 
-    _entranceController = AnimationController(
-      duration: const Duration(milliseconds: 600),
-      vsync: this,
-    );
-
-    _pressController = AnimationController(
-      duration: const Duration(milliseconds: 150),
-      vsync: this,
-    );
-
-    _entranceAnimation = CurvedAnimation(
-      parent: _entranceController,
-      curve: Curves.easeOutBack,
-    );
-
-    _scaleAnimation = Tween<double>(
-      begin: 1.0,
-      end: 0.95,
-    ).animate(CurvedAnimation(
-      parent: _pressController,
-      curve: Curves.easeInOut,
-    ));
-
-    _slideAnimation = Tween<double>(
-      begin: 30.0,
-      end: 0.0,
-    ).animate(_entranceAnimation);
-
-    Future.delayed(Duration(milliseconds: widget.animationDelay), () {
-      if (mounted) {
-        _entranceController.forward();
-      }
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final category = VideoCategory.categorizeVideo(
-        widget.video.title,
-        widget.video.description
-    );
-
-    return AnimatedBuilder(
-      animation: _entranceAnimation,
-      builder: (context, child) {
-        final opacity = _entranceAnimation.value.clamp(0.0, 1.0);
-        final slideOffset = _slideAnimation.value.clamp(0.0, 30.0);
-
-        return Transform.translate(
-          offset: Offset(0, slideOffset),
-          child: Opacity(
-            opacity: opacity,
-            child: AnimatedBuilder(
-              animation: _scaleAnimation,
-              builder: (context, child) {
-                final scale = _scaleAnimation.value.clamp(0.9, 1.0);
-
-                return Transform.scale(
-                  scale: scale,
-                  child: GestureDetector(
-                    onTapDown: (_) {
-                      if (!mounted) return;
-                      setState(() => _isPressed = true);
-                      _pressController.forward();
-                      HapticFeedback.lightImpact();
-                    },
-                    onTapUp: (_) {
-                      if (!mounted) return;
-                      setState(() => _isPressed = false);
-                      _pressController.reverse();
-                      widget.onTap();
-                    },
-                    onTapCancel: () {
-                      if (!mounted) return;
-                      setState(() => _isPressed = false);
-                      _pressController.reverse();
-                    },
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: AppColors.surfaceBackground,
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: [
-                          BoxShadow(
-                            color: _isPressed
-                                ? AppColors.primaryAccent.withOpacity(0.3)
-                                : AppColors.shadowLight,
-                            blurRadius: _isPressed ? 15 : 8,
-                            spreadRadius: _isPressed ? 2 : 0,
-                            offset: Offset(0, _isPressed ? 4 : 2),
-                          ),
-                        ],
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // Thumbnail
-                          Expanded(
-                            flex: 3,
-                            child: YouTubeVideoCard(
-                              video: widget.video,
-                              onTap: widget.onTap,
-                              showPlayButton: true,
-                            ),
-                          ),
-
-                          // Content
-                          Expanded(
-                            flex: 2,
-                            child: Padding(
-                              padding: const EdgeInsets.all(12),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  // Category badge
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 8,
-                                      vertical: 4,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: AppColors.primaryAccent.withOpacity(0.1),
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: Text(
-                                      category,
-                                      style: GoogleFonts.lato(
-                                        fontSize: 10,
-                                        color: AppColors.primaryAccent,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ),
-
-                                  const SizedBox(height: 8),
-
-                                  // Title
-                                  Expanded(
-                                    child: Text(
-                                      widget.video.title,
-                                      style: GoogleFonts.lato(
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w600,
-                                        color: AppColors.textPrimary,
-                                        height: 1.3,
-                                      ),
-                                      maxLines: 2,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-
-                                  // Stats
-                                  Row(
-                                    children: [
-                                      Icon(
-                                        Icons.visibility,
-                                        size: 12,
-                                        color: AppColors.textSecondary,
-                                      ),
-                                      const SizedBox(width: 4),
-                                      Expanded(
-                                        child: Text(
-                                          _formatViewCount(widget.video.viewCount),
-                                          style: GoogleFonts.lato(
-                                            fontSize: 11,
-                                            color: AppColors.textSecondary,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  String _formatViewCount(int viewCount) {
-    if (viewCount >= 1000000) {
-      return '${(viewCount / 1000000).toStringAsFixed(1)}M';
-    } else if (viewCount >= 1000) {
-      return '${(viewCount / 1000).toStringAsFixed(1)}K';
-    } else {
-      return '$viewCount';
+// Network connectivity helper
+class NetworkHelper {
+  static Future<bool> hasConnection() async {
+    try {
+      // You can implement actual network connectivity check here
+      return true;
+    } catch (e) {
+      return false;
     }
-  }
-
-  @override
-  void dispose() {
-    _entranceController.dispose();
-    _pressController.dispose();
-    super.dispose();
   }
 }

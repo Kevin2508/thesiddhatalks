@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../utils/app_colors.dart';
 import '../models/youtube_models.dart';
 import '../services/youtube_service.dart';
-import '../widgets/youtube_playlist_carousel.dart';
 import 'player_screen.dart';
 
 class ExploreScreen extends StatefulWidget {
@@ -657,14 +657,10 @@ class _ExploreVideoCardState extends State<ExploreVideoCard>
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Thumbnail
+                          // Custom Thumbnail (replacing YouTubeVideoCard)
                           Expanded(
                             flex: 3,
-                            child: YouTubeVideoCard(
-                              video: widget.video,
-                              onTap: widget.onTap,
-                              showPlayButton: true,
-                            ),
+                            child: _buildThumbnail(),
                           ),
 
                           // Content
@@ -746,6 +742,123 @@ class _ExploreVideoCardState extends State<ExploreVideoCard>
           ),
         );
       },
+    );
+  }
+
+  Widget _buildThumbnail() {
+    return ClipRRect(
+      borderRadius: const BorderRadius.only(
+        topLeft: Radius.circular(16),
+        topRight: Radius.circular(16),
+      ),
+      child: Stack(
+        children: [
+          CachedNetworkImage(
+            imageUrl: widget.video.thumbnailUrl,
+            width: double.infinity,
+            height: double.infinity,
+            fit: BoxFit.cover,
+            placeholder: (context, url) => Container(
+              color: AppColors.cardBackground,
+              child: Center(
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                    AppColors.primaryAccent,
+                  ),
+                ),
+              ),
+            ),
+            errorWidget: (context, url, error) => Container(
+              color: AppColors.cardBackground,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.error_outline,
+                    color: AppColors.textSecondary,
+                    size: 24,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Failed to load',
+                    style: GoogleFonts.lato(
+                      fontSize: 12,
+                      color: AppColors.textSecondary,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // Play button overlay
+          Center(
+            child: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.black54,
+                borderRadius: BorderRadius.circular(30),
+              ),
+              child: const Icon(
+                Icons.play_arrow,
+                color: Colors.white,
+                size: 32,
+              ),
+            ),
+          ),
+
+          // Duration badge
+          Positioned(
+            bottom: 8,
+            right: 8,
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 8,
+                vertical: 4,
+              ),
+              decoration: BoxDecoration(
+                color: Colors.black87,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                widget.video.duration,
+                style: GoogleFonts.lato(
+                  fontSize: 12,
+                  color: Colors.white,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ),
+
+          // New badge
+          if (widget.video.isNew)
+            Positioned(
+              top: 8,
+              left: 8,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: AppColors.primaryAccent,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  'NEW',
+                  style: GoogleFonts.lato(
+                    fontSize: 10,
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 
