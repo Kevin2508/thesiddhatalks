@@ -109,13 +109,15 @@ class _SplashScreenState extends State<SplashScreen>
 
                               // App Name
                               Text(
-                                'The Siddha Talks',
+                                'Siddha\nKutumbakam',
                                 style: GoogleFonts.teko(
                                   fontSize: 36,
                                   fontWeight: FontWeight.bold,
                                   color: AppColors.textPrimary,
                                   letterSpacing: 2,
+
                                 ),
+                                textAlign: TextAlign.center,
                               ),
 
                               const SizedBox(height: 20),

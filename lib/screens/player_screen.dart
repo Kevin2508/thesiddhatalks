@@ -1,10 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:youtube_player_flutter/youtube_player_flutter.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../utils/app_colors.dart';
+import '../models/youtube_models.dart';
+import '../services/youtube_service.dart';
+import '../widgets/playlist_carousel.dart';
 
 class PlayerScreen extends StatefulWidget {
-  const PlayerScreen({Key? key}) : super(key: key);
+  final YouTubeVideo? video;
+
+  const PlayerScreen({Key? key, this.video}) : super(key: key);
 
   @override
   State<PlayerScreen> createState() => _PlayerScreenState();
@@ -13,103 +21,398 @@ class PlayerScreen extends StatefulWidget {
 class _PlayerScreenState extends State<PlayerScreen>
     with TickerProviderStateMixin {
   late TabController _tabController;
+  late YoutubePlayerController _youtubeController;
+  final YouTubeService _youtubeService = YouTubeService();
+
+  bool _isPlayerReady = false;
+  bool _isFullScreen = false;
+  List<YouTubeVideo> _relatedVideos = [];
+  List<Comment> _comments = [];
+  bool _isLoadingRelated = true;
+  bool _isLoadingComments = true;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 1, vsync: this); // Only About tab
+    _tabController = TabController(length: 3, vsync: this); // About, Comments, Related
+
+    if (widget.video != null) {
+      _initializePlayer();
+      _loadRelatedContent();
+    }
+  }
+
+  void _initializePlayer() {
+    _youtubeController = YoutubePlayerController(
+      initialVideoId: widget.video!.id,
+      flags: const YoutubePlayerFlags(
+        autoPlay: false,
+        mute: false,
+        enableCaption: true,
+        captionLanguage: 'en',
+        startAt: 0,
+      ),
+    );
+  }
+
+  Future<void> _loadRelatedContent() async {
+    try {
+      // Load related videos from the same channel
+      final uploads = await _youtubeService.getChannelUploads(maxResults: 10);
+      final related = uploads.where((v) => v.id != widget.video!.id).take(8).toList();
+
+      setState(() {
+        _relatedVideos = related;
+        _isLoadingRelated = false;
+      });
+    } catch (e) {
+      setState(() {
+        _isLoadingRelated = false;
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.primaryBackground,
-      body: SafeArea(
-        child: Column(
-          children: [
-            // App Bar
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                children: [
-                  GestureDetector(
-                    onTap: () {
-                      HapticFeedback.lightImpact();
-                      Navigator.of(context).pop();
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: AppColors.surfaceBackground,
-                        borderRadius: BorderRadius.circular(12),
-                        boxShadow: [
-                          BoxShadow(
-                            color: AppColors.shadowLight,
-                            blurRadius: 8,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                      child: const Icon(
-                        Icons.arrow_back_ios_new,
-                        color: AppColors.textPrimary,
-                        size: 20,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Text(
-                      'Morning Mindfulness',
-                      style: GoogleFonts.rajdhani(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.textPrimary,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: () {},
-                    icon: const Icon(
-                      Icons.share_outlined,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                ],
-              ),
-            ),
+    if (widget.video == null) {
+      return Scaffold(
+        backgroundColor: AppColors.primaryBackground,
+        appBar: AppBar(
+          title: Text('Video Player'),
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+        ),
+        body: const Center(
+          child: Text('No video selected'),
+        ),
+      );
+    }
 
-            // Video Player Area
-            Container(
-              height: MediaQuery.of(context).size.height * 0.25,
-              margin: const EdgeInsets.symmetric(horizontal: 16),
+    return YoutubePlayerBuilder(
+      onExitFullScreen: () {
+        setState(() {
+          _isFullScreen = false;
+        });
+        SystemChrome.setPreferredOrientations(DeviceOrientation.values);
+      },
+      player: YoutubePlayer(
+        controller: _youtubeController,
+        showVideoProgressIndicator: true,
+        progressIndicatorColor: AppColors.primaryAccent,
+        topActions: <Widget>[
+          const SizedBox(width: 8.0),
+          Expanded(
+            child: Text(
+              widget.video!.title,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 18.0,
+              ),
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
+            ),
+          ),
+          IconButton(
+            icon: const Icon(
+              Icons.settings,
+              color: Colors.white,
+              size: 25.0,
+            ),
+            onPressed: () {
+              // Settings can be handled by the player itself
+            },
+          ),
+        ],
+        onReady: () {
+          setState(() {
+            _isPlayerReady = true;
+          });
+        },
+        onEnded: (data) {
+          // Auto-play next video or show completion
+          _showVideoCompleted();
+        },
+      ),
+      builder: (context, player) => Scaffold(
+        backgroundColor: AppColors.primaryBackground,
+        body: SafeArea(
+          child: Column(
+            children: [
+              // Custom App Bar (hidden in fullscreen)
+              if (!_isFullScreen) _buildAppBar(),
+
+              // Video Player
+              player,
+
+              // Content below player
+              if (!_isFullScreen) _buildContentSection(),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAppBar() {
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        children: [
+          GestureDetector(
+            onTap: () {
+              HapticFeedback.lightImpact();
+              Navigator.of(context).pop();
+            },
+            child: Container(
+              padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
                 color: AppColors.surfaceBackground,
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(12),
                 boxShadow: [
                   BoxShadow(
                     color: AppColors.shadowLight,
-                    blurRadius: 10,
+                    blurRadius: 8,
                     offset: const Offset(0, 2),
                   ),
                 ],
               ),
-              child: const Center(
-                child: Icon(
-                  Icons.play_circle_fill,
-                  size: 80,
-                  color: AppColors.textSecondary,
+              child: const Icon(
+                Icons.arrow_back_ios_new,
+                color: AppColors.textPrimary,
+                size: 20,
+              ),
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Text(
+              widget.video!.title,
+              style: GoogleFonts.rajdhani(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: AppColors.textPrimary,
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          IconButton(
+            onPressed: _shareVideo,
+            icon: const Icon(
+              Icons.share_outlined,
+              color: AppColors.textSecondary,
+            ),
+          ),
+          IconButton(
+            onPressed: _openInYouTube,
+            icon: const Icon(
+              Icons.open_in_new,
+              color: AppColors.textSecondary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildContentSection() {
+    return Expanded(
+      child: Column(
+        children: [
+          // Video Info
+          _buildVideoInfo(),
+
+          // Tab Bar
+          Container(
+            decoration: BoxDecoration(
+              color: AppColors.surfaceBackground,
+              border: Border(
+                bottom: BorderSide(
+                  color: AppColors.divider,
+                  width: 1,
                 ),
               ),
             ),
+            child: TabBar(
+              controller: _tabController,
+              labelColor: AppColors.primaryAccent,
+              unselectedLabelColor: AppColors.textSecondary,
+              indicatorColor: AppColors.primaryAccent,
+              labelStyle: GoogleFonts.lato(
+                fontWeight: FontWeight.w600,
+                fontSize: 14,
+              ),
+              tabs: const [
+                Tab(text: 'About'),
+                Tab(text: 'Related'),
+                Tab(text: 'Comments'),
+              ],
+            ),
+          ),
 
+          // Tab Content
+          Expanded(
+            child: TabBarView(
+              controller: _tabController,
+              children: [
+                _buildAboutTab(),
+                _buildRelatedTab(),
+                _buildCommentsTab(),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildVideoInfo() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceBackground,
+        border: Border(
+          bottom: BorderSide(
+            color: AppColors.divider,
+            width: 1,
+          ),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            widget.video!.title,
+            style: GoogleFonts.rajdhani(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Icon(
+                Icons.visibility,
+                size: 16,
+                color: AppColors.textSecondary,
+              ),
+              const SizedBox(width: 4),
+              Text(
+                _formatViewCount(widget.video!.viewCount),
+                style: GoogleFonts.lato(
+                  fontSize: 14,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Icon(
+                Icons.thumb_up_outlined,
+                size: 16,
+                color: AppColors.textSecondary,
+              ),
+              const SizedBox(width: 4),
+              Text(
+                _formatViewCount(widget.video!.likeCount),
+                style: GoogleFonts.lato(
+                  fontSize: 14,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Icon(
+                Icons.schedule,
+                size: 16,
+                color: AppColors.textSecondary,
+              ),
+              const SizedBox(width: 4),
+              Text(
+                widget.video!.duration,
+                style: GoogleFonts.lato(
+                  fontSize: 14,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                _timeAgo(widget.video!.publishedAt),
+                style: GoogleFonts.lato(
+                  fontSize: 14,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAboutTab() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceBackground,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.shadowLight,
+              blurRadius: 10,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryAccent.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    Icons.info_outline,
+                    color: AppColors.primaryAccent,
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  'About This Video',
+                  style: GoogleFonts.rajdhani(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Text(
+              widget.video!.description.isNotEmpty
+                  ? widget.video!.description
+                  : 'Experience this beautiful meditation session designed to bring peace and mindfulness to your day.',
+              style: GoogleFonts.lato(
+                fontSize: 16,
+                color: AppColors.textPrimary,
+                height: 1.6,
+              ),
+            ),
             const SizedBox(height: 20),
-
-            // About Content (No tabs needed since we removed comments and Q&A)
-            Expanded(
-              child: _buildAboutContent(),
+            Row(
+              children: [
+                _buildInfoChip('Channel', widget.video!.channelTitle),
+                const SizedBox(width: 12),
+                _buildInfoChip('Category', VideoCategory.categorizeVideo(
+                    widget.video!.title,
+                    widget.video!.description
+                )),
+              ],
             ),
           ],
         ),
@@ -117,79 +420,77 @@ class _PlayerScreenState extends State<PlayerScreen>
     );
   }
 
-  Widget _buildAboutContent() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
+  Widget _buildRelatedTab() {
+    if (_isLoadingRelated) {
+      return const Center(
+        child: CircularProgressIndicator(
+          valueColor: AlwaysStoppedAnimation<Color>(AppColors.primaryAccent),
+        ),
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(20),
+      itemCount: _relatedVideos.length,
+      itemBuilder: (context, index) {
+        final video = _relatedVideos[index];
+        return Container(
+          margin: const EdgeInsets.only(bottom: 16),
+          child: YouTubeVideoListItem(
+            video: video,
+            onTap: () => _playRelatedVideo(video),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildCommentsTab() {
+    return Center(
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: AppColors.surfaceBackground,
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: AppColors.shadowLight,
-                  blurRadius: 10,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: AppColors.primaryAccent.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Icon(
-                        Icons.info_outline,
-                        color: AppColors.primaryAccent,
-                        size: 20,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Text(
-                      'About This Meditation',
-                      style: GoogleFonts.rajdhani(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                  ],
-                ),
-
-                const SizedBox(height: 16),
-
-                Text(
-                  'Begin your day with this gentle morning mindfulness practice. This guided meditation helps you cultivate awareness, set positive intentions, and create a peaceful foundation for the day ahead.\n\nWhat you\'ll experience:\n• Breath awareness techniques\n• Body relaxation\n• Mindful intention setting\n• Gentle awakening of consciousness\n\nPerfect for both beginners and experienced practitioners. Find a comfortable seated position, close your eyes, and let this meditation guide you into a state of calm awareness.',
-                  style: GoogleFonts.lato(
-                    fontSize: 16,
-                    color: AppColors.textPrimary,
-                    height: 1.6,
-                  ),
-                ),
-
-                const SizedBox(height: 20),
-
-                Row(
-                  children: [
-                    _buildInfoChip('Duration', '15:30'),
-                    const SizedBox(width: 12),
-                    _buildInfoChip('Level', 'All Levels'),
-                  ],
-                ),
-              ],
+          Icon(
+            Icons.forum_outlined,
+            size: 64,
+            color: AppColors.textSecondary.withOpacity(0.5),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Comments',
+            style: GoogleFonts.rajdhani(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: AppColors.textSecondary,
             ),
           ),
-
-          const SizedBox(height: 100),
+          const SizedBox(height: 8),
+          Text(
+            'Share your thoughts and connect\nwith fellow practitioners',
+            style: GoogleFonts.lato(
+              fontSize: 16,
+              color: AppColors.textSecondary,
+              height: 1.4,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 24),
+          ElevatedButton.icon(
+            onPressed: _openInYouTube,
+            icon: const Icon(Icons.comment),
+            label: Text('View on YouTube'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primaryAccent,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(
+                horizontal: 24,
+                vertical: 12,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -234,9 +535,127 @@ class _PlayerScreenState extends State<PlayerScreen>
     );
   }
 
+  void _shareVideo() {
+    final url = 'https://youtu.be/${widget.video!.id}';
+    Share.share(
+      '${widget.video!.title}\n\n$url',
+      subject: 'Check out this meditation video',
+    );
+  }
+
+  void _openInYouTube() async {
+    final url = 'https://youtu.be/${widget.video!.id}';
+    if (await canLaunchUrl(Uri.parse(url))) {
+      await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+    }
+  }
+
+  void _playRelatedVideo(YouTubeVideo video) {
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (context) => PlayerScreen(video: video),
+      ),
+    );
+  }
+
+  void _showVideoCompleted() {
+    if (_relatedVideos.isNotEmpty) {
+      showDialog(
+        context: context,
+        builder: (BuildContext context) {
+          return AlertDialog(
+            backgroundColor: AppColors.surfaceBackground,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            title: Text(
+              'Video Completed',
+              style: GoogleFonts.rajdhani(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: AppColors.textPrimary,
+              ),
+            ),
+            content: Text(
+              'Would you like to watch the next video?',
+              style: GoogleFonts.lato(
+                fontSize: 16,
+                color: AppColors.textSecondary,
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: Text(
+                  'No, thanks',
+                  style: GoogleFonts.lato(
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  _playRelatedVideo(_relatedVideos.first);
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primaryAccent,
+                  foregroundColor: Colors.white,
+                ),
+                child: Text('Play Next'),
+              ),
+            ],
+          );
+        },
+      );
+    }
+  }
+
+  String _formatViewCount(int count) {
+    if (count >= 1000000) {
+      return '${(count / 1000000).toStringAsFixed(1)}M';
+    } else if (count >= 1000) {
+      return '${(count / 1000).toStringAsFixed(1)}K';
+    } else {
+      return count.toString();
+    }
+  }
+
+  String _timeAgo(DateTime publishedAt) {
+    final now = DateTime.now();
+    final difference = now.difference(publishedAt);
+
+    if (difference.inDays > 0) {
+      return '${difference.inDays} days ago';
+    } else if (difference.inHours > 0) {
+      return '${difference.inHours} hours ago';
+    } else {
+      return '${difference.inMinutes} minutes ago';
+    }
+  }
+
   @override
   void dispose() {
+    _youtubeController.dispose();
     _tabController.dispose();
     super.dispose();
   }
+}
+
+// Simple comment model for future implementation
+class Comment {
+  final String id;
+  final String author;
+  final String content;
+  final DateTime publishedAt;
+  final int likeCount;
+
+  Comment({
+    required this.id,
+    required this.author,
+    required this.content,
+    required this.publishedAt,
+    required this.likeCount,
+  });
 }
