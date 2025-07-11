@@ -6,6 +6,7 @@ import '../utils/app_colors.dart';
 import '../widgets/hero_card.dart';
 import '../widgets/greeting_section.dart';
 import '../widgets/youtube_playlist_carousel.dart';
+import '../widgets/live_stream_banner.dart';
 import '../services/youtube_service.dart';
 import '../models/youtube_models.dart';
 
@@ -22,9 +23,13 @@ class _HomeScreenState extends State<HomeScreen>
   final ScrollController _pageScrollController = ScrollController();
   final YouTubeService _youtubeService = YouTubeService();
 
-  List<PlaylistInfo> _playlists = [];
+  List<PlaylistInfo> _allPlaylists = [];
+  List<PlaylistInfo> _displayedPlaylists = [];
   Map<String, List<YouTubeVideo>> _playlistVideos = {};
+  List<LiveStream> _liveStreams = [];
   bool _isLoading = true;
+  bool _isLoadingMore = false;
+  bool _hasMore = false;
   String? _error;
 
   @override
@@ -36,10 +41,20 @@ class _HomeScreenState extends State<HomeScreen>
     );
 
     _loadData();
+    _setupScrollListener();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         _scrollController.forward();
+      }
+    });
+  }
+
+  void _setupScrollListener() {
+    _pageScrollController.addListener(() {
+      if (_pageScrollController.position.pixels >=
+          _pageScrollController.position.maxScrollExtent - 200) {
+        _loadMoreContent();
       }
     });
   }
@@ -51,46 +66,90 @@ class _HomeScreenState extends State<HomeScreen>
         _error = null;
       });
 
-      // Load all playlists
-      final playlists = await _youtubeService.getChannelPlaylists();
+      print('🏠 Starting optimized home page load...');
+      final stopwatch = Stopwatch()..start();
 
-      // Load ALL videos for each playlist (since each playlist has only 1-3 videos)
-      final Map<String, List<YouTubeVideo>> playlistVideos = {};
-
-      for (final playlist in playlists) {
-        try {
-          // Fetch ALL videos from each playlist (remove maxResults limit or set it high)
-          final videos = await _youtubeService.getPlaylistVideos(
-            playlist.id,
-            maxResults: 50, // Increased limit to ensure we get all videos
-          );
-          playlistVideos[playlist.id] = videos;
-
-          // Debug print to check if videos are being loaded
-          print('Loaded ${videos.length} videos for playlist: ${playlist.title}');
-        } catch (e) {
-          print('Error loading videos for playlist ${playlist.title}: $e');
-          // Continue with empty list for this playlist
-          playlistVideos[playlist.id] = [];
-        }
-      }
+      final result = await _youtubeService.loadHomePageData();
 
       setState(() {
-        _playlists = playlists;
-        _playlistVideos = playlistVideos;
+        _allPlaylists = result['playlists'] as List<PlaylistInfo>;
+        _displayedPlaylists = result['initialPlaylists'] as List<PlaylistInfo>;
+        _playlistVideos = result['playlistVideos'] as Map<String, List<YouTubeVideo>>;
+        _liveStreams = result['liveStreams'] as List<LiveStream>;
+        _hasMore = result['hasMore'] as bool;
         _isLoading = false;
       });
 
-      // Debug print to check total playlists and videos loaded
-      print('Total playlists loaded: ${_playlists.length}');
-      print('Playlists with videos: ${_playlistVideos.keys.length}');
+      stopwatch.stop();
+      print('✅ Home page loaded in ${stopwatch.elapsedMilliseconds}ms');
+      print('📊 Loaded ${_displayedPlaylists.length}/${_allPlaylists.length} playlists');
+      print('🔴 Found ${_liveStreams.length} live streams');
+
+      // Log live stream status for debugging
+      final activeLiveStreams = _liveStreams.where((stream) => stream.isLive).toList();
+      print('🔴 Active live streams: ${activeLiveStreams.length}');
+      for (final stream in activeLiveStreams) {
+        print('   - ${stream.title} (${stream.statusText})');
+      }
 
     } catch (e) {
-      print('Error in _loadData: $e');
+      print('❌ Error in _loadData: $e');
       setState(() {
         _error = e.toString();
         _isLoading = false;
       });
+    }
+  }
+
+  Future<void> _loadMoreContent() async {
+    if (_isLoadingMore || !_hasMore) return;
+
+    setState(() {
+      _isLoadingMore = true;
+    });
+
+    try {
+      const batchSize = 2;
+      final currentCount = _displayedPlaylists.length;
+      final remainingPlaylists = _allPlaylists.skip(currentCount).take(batchSize).toList();
+
+      if (remainingPlaylists.isEmpty) {
+        setState(() {
+          _hasMore = false;
+          _isLoadingMore = false;
+        });
+        return;
+      }
+
+      final playlistIds = remainingPlaylists.map((p) => p.id).toList();
+      final moreVideos = await _youtubeService.batchLoadPlaylistVideos(playlistIds, maxResults: 3);
+
+      setState(() {
+        _displayedPlaylists.addAll(remainingPlaylists);
+        _playlistVideos.addAll(moreVideos);
+        _hasMore = _displayedPlaylists.length < _allPlaylists.length;
+        _isLoadingMore = false;
+      });
+
+    } catch (e) {
+      setState(() {
+        _isLoadingMore = false;
+      });
+      print('❌ Error loading more content: $e');
+    }
+  }
+
+  // Check if there are any active live streams
+  bool get _hasActiveLiveStream {
+    return _liveStreams.any((stream) => stream.isLive);
+  }
+
+  // Get the current live stream (if any)
+  LiveStream? get _currentLiveStream {
+    try {
+      return _liveStreams.firstWhere((stream) => stream.isLive);
+    } catch (e) {
+      return null;
     }
   }
 
@@ -100,7 +159,11 @@ class _HomeScreenState extends State<HomeScreen>
       backgroundColor: AppColors.primaryBackground,
       body: SafeArea(
         child: RefreshIndicator(
-          onRefresh: _loadData,
+          onRefresh: () async {
+            await _youtubeService.clearCache();
+            await _youtubeService.clearLiveStreamCache();
+            await _loadData();
+          },
           child: CustomScrollView(
             controller: _pageScrollController,
             physics: const BouncingScrollPhysics(),
@@ -123,6 +186,55 @@ class _HomeScreenState extends State<HomeScreen>
                   ],
                 ),
                 actions: [
+                  // Live indicator - only show if there's an active live stream
+                  if (_hasActiveLiveStream && !_isLoading)
+                    Container(
+                      margin: const EdgeInsets.only(right: 8),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.red,
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.red.withOpacity(0.3),
+                            blurRadius: 4,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // Pulsing dot animation
+                          TweenAnimationBuilder<double>(
+                            tween: Tween(begin: 0.5, end: 1.0),
+                            duration: const Duration(milliseconds: 1000),
+                            builder: (context, value, child) {
+                              return Container(
+                                width: 6,
+                                height: 6,
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withOpacity(value),
+                                  shape: BoxShape.circle,
+                                ),
+                              );
+                            },
+                            onEnd: () {
+                              // Animation restarts automatically
+                            },
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            'LIVE',
+                            style: GoogleFonts.lato(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   IconButton(
                     icon: const Icon(
                       Icons.notifications_outlined,
@@ -149,6 +261,13 @@ class _HomeScreenState extends State<HomeScreen>
                           child: const GreetingSection(),
                         ),
 
+                        // Live Stream Banner - ONLY show when there's an active live stream
+                        if (_hasActiveLiveStream && !_isLoading && _currentLiveStream != null)
+                          _buildAnimatedSection(
+                            interval: const Interval(0.1, 0.4, curve: Curves.easeOut),
+                            child: _buildLiveStreamSection(_currentLiveStream!),
+                          ),
+
                         // Hero Card
                         _buildAnimatedSection(
                           interval: const Interval(0.2, 0.5, curve: Curves.easeOut),
@@ -165,10 +284,14 @@ class _HomeScreenState extends State<HomeScreen>
                           _buildErrorWidget()
                         else if (_isLoading)
                           _buildSkeletonLoading()
-                        else if (_playlists.isEmpty)
+                        else if (_displayedPlaylists.isEmpty)
                             _buildEmptyStateWidget()
                           else
                             ..._buildPlaylistSections(),
+
+                        // Load more content
+                        if (_isLoadingMore) _buildLoadMoreIndicator(),
+                        if (_hasMore && !_isLoadingMore) _buildLoadMoreButton(),
 
                         // Bottom padding
                         SizedBox(
@@ -186,9 +309,139 @@ class _HomeScreenState extends State<HomeScreen>
     );
   }
 
+  Widget _buildLiveStreamSection(LiveStream liveStream) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: Row(
+            children: [
+              // Pulsing live indicator
+              TweenAnimationBuilder<double>(
+                tween: Tween(begin: 0.5, end: 1.0),
+                duration: const Duration(milliseconds: 800),
+                builder: (context, value, child) {
+                  return Container(
+                    width: 12,
+                    height: 12,
+                    decoration: BoxDecoration(
+                      color: Colors.red.withOpacity(value),
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.red.withOpacity(0.4),
+                          blurRadius: 4,
+                          spreadRadius: 1,
+                        ),
+                      ],
+                    ),
+                  );
+                },
+                onEnd: () {
+                  // Animation restarts automatically
+                },
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Live Now',
+                style: GoogleFonts.rajdhani(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+              const SizedBox(width: 8),
+              // Viewer count for live stream
+              if (liveStream.concurrentViewers != null)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.red.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: Colors.red.withOpacity(0.3),
+                      width: 1,
+                    ),
+                  ),
+                  child: Text(
+                    '${_formatNumber(liveStream.concurrentViewers!)} watching',
+                    style: GoogleFonts.lato(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.red,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        LiveStreamBanner(liveStream: liveStream),
+      ],
+    );
+  }
+
+  String _formatNumber(int number) {
+    if (number >= 1000000) {
+      return '${(number / 1000000).toStringAsFixed(1)}M';
+    } else if (number >= 1000) {
+      return '${(number / 1000).toStringAsFixed(1)}K';
+    } else {
+      return number.toString();
+    }
+  }
+
+  Widget _buildLoadMoreIndicator() {
+    return Padding(
+      padding: const EdgeInsets.all(20),
+      child: Center(
+        child: Column(
+          children: [
+            CircularProgressIndicator(
+              valueColor: AlwaysStoppedAnimation<Color>(AppColors.primaryAccent),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Loading more content...',
+              style: GoogleFonts.lato(
+                fontSize: 14,
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLoadMoreButton() {
+    return Padding(
+      padding: const EdgeInsets.all(20),
+      child: Center(
+        child: ElevatedButton.icon(
+          onPressed: _loadMoreContent,
+          icon: const Icon(Icons.expand_more),
+          label: Text('Load More (${_allPlaylists.length - _displayedPlaylists.length} remaining)'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppColors.primaryAccent,
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(
+              horizontal: 24,
+              vertical: 12,
+            ),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildSkeletonLoading() {
     return Column(
-      children: List.generate(3, (index) => _buildPlaylistSkeleton()),
+      children: List.generate(2, (index) => _buildPlaylistSkeleton()),
     );
   }
 
@@ -198,7 +451,6 @@ class _HomeScreenState extends State<HomeScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Playlist header skeleton
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
             child: Row(
@@ -228,10 +480,7 @@ class _HomeScreenState extends State<HomeScreen>
               ],
             ),
           ),
-
           const SizedBox(height: 16),
-
-          // Video cards skeleton
           SizedBox(
             height: 200,
             child: ListView.builder(
@@ -253,34 +502,24 @@ class _HomeScreenState extends State<HomeScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Video thumbnail skeleton
           _buildSkeletonContainer(
             width: 280,
             height: 120,
             borderRadius: 12,
           ),
-
           const SizedBox(height: 12),
-
-          // Video title skeleton
           _buildSkeletonContainer(
             width: 260,
             height: 18,
             borderRadius: 6,
           ),
-
           const SizedBox(height: 8),
-
-          // Video description skeleton
           _buildSkeletonContainer(
             width: 200,
             height: 14,
             borderRadius: 4,
           ),
-
           const SizedBox(height: 6),
-
-          // Video duration skeleton
           _buildSkeletonContainer(
             width: 80,
             height: 12,
@@ -304,7 +543,7 @@ class _HomeScreenState extends State<HomeScreen>
         width: width,
         height: height,
         decoration: BoxDecoration(
-          color: AppColors.textSecondary.withOpacity(0.7),
+          color: AppColors.textSecondary.withOpacity(0.1),
           borderRadius: BorderRadius.circular(borderRadius),
         ),
       ),
@@ -313,7 +552,7 @@ class _HomeScreenState extends State<HomeScreen>
 
   List<Widget> _buildPlaylistSections() {
     // Filter out playlists that have no videos
-    final playlistsWithVideos = _playlists.where((playlist) {
+    final playlistsWithVideos = _displayedPlaylists.where((playlist) {
       final videos = _playlistVideos[playlist.id] ?? [];
       return videos.isNotEmpty;
     }).toList();
@@ -518,7 +757,7 @@ class _PlaylistVideosScreenState extends State<PlaylistVideosScreen> {
 
       final videos = await _youtubeService.getPlaylistVideos(
         widget.playlist.id,
-        maxResults: 50, // Load all videos
+        maxResults: 50,
       );
 
       setState(() {
@@ -598,7 +837,6 @@ class _PlaylistVideosScreenState extends State<PlaylistVideosScreen> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Thumbnail skeleton
           Shimmer.fromColors(
             baseColor: AppColors.textSecondary.withOpacity(0.1),
             highlightColor: AppColors.textSecondary.withOpacity(0.2),
@@ -611,10 +849,7 @@ class _PlaylistVideosScreenState extends State<PlaylistVideosScreen> {
               ),
             ),
           ),
-
           const SizedBox(width: 12),
-
-          // Content skeleton
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -665,7 +900,6 @@ class _PlaylistVideosScreenState extends State<PlaylistVideosScreen> {
   }
 
   void _playVideo(YouTubeVideo video) {
-    // Navigate to player with video ID
     Navigator.pushNamed(
       context,
       '/player',

@@ -56,52 +56,27 @@ class _ExploreScreenState extends State<ExploreScreen>
         _error = null;
       });
 
-      // Load all playlists
-      final playlists = await _youtubeService.getChannelPlaylists();
+      print('🔍 Starting optimized explore page load...');
+      final stopwatch = Stopwatch()..start();
 
-      // Build categories from playlist names
-      final categories = ['All'];
-      final categorizedVideos = <String, List<YouTubeVideo>>{};
-      final allVideos = <YouTubeVideo>[];
-
-      // Load videos for each playlist and use playlist names as categories
-      for (final playlist in playlists) {
-        try {
-          final videos = await _youtubeService.getPlaylistVideos(
-            playlist.id,
-            maxResults: 50,
-          );
-
-          if (videos.isNotEmpty) {
-            categories.add(playlist.title);
-            categorizedVideos[playlist.title] = videos;
-            allVideos.addAll(videos);
-          }
-        } catch (e) {
-          print('Error loading videos for playlist ${playlist.title}: $e');
-        }
-      }
-
-      // Remove duplicates from allVideos based on video ID
-      final uniqueVideos = <String, YouTubeVideo>{};
-      for (final video in allVideos) {
-        uniqueVideos[video.id] = video;
-      }
+      // Use optimized loading method
+      final result = await _youtubeService.loadExplorePageData();
 
       setState(() {
-        _playlists = playlists;
-        _categories = categories;
-        _allVideos = uniqueVideos.values.toList();
-        _categorizedVideos = categorizedVideos;
-        _filteredVideos = uniqueVideos.values.toList();
+        _playlists = result['playlists'] as List<PlaylistInfo>;
+        _categories = result['categories'] as List<String>;
+        _allVideos = result['allVideos'] as List<YouTubeVideo>;
+        _categorizedVideos = result['categorizedVideos'] as Map<String, List<YouTubeVideo>>;
+        _filteredVideos = result['allVideos'] as List<YouTubeVideo>;
         _isLoading = false;
       });
 
-      print('Total categories loaded: ${_categories.length}');
-      print('Total unique videos loaded: ${_allVideos.length}');
+      stopwatch.stop();
+      print('✅ Explore page loaded in ${stopwatch.elapsedMilliseconds}ms');
+      print('📊 Loaded ${_categories.length} categories with ${_allVideos.length} videos');
 
     } catch (e) {
-      print('Error in _loadData: $e');
+      print('❌ Error in _loadData: $e');
       setState(() {
         _error = e.toString();
         _isLoading = false;
@@ -165,7 +140,10 @@ class _ExploreScreenState extends State<ExploreScreen>
       backgroundColor: AppColors.primaryBackground,
       body: SafeArea(
         child: RefreshIndicator(
-          onRefresh: _loadData,
+          onRefresh: () async {
+            await _youtubeService.clearCache();
+            await _loadData();
+          },
           child: Column(
             children: [
               // Header
@@ -417,7 +395,7 @@ class _ExploreScreenState extends State<ExploreScreen>
         crossAxisSpacing: 16,
         mainAxisSpacing: 16,
       ),
-      itemCount: 8,
+      itemCount: 6, // Reduced from 8 for faster loading
       itemBuilder: (context, index) => _buildVideoCardSkeleton(),
     );
   }
@@ -639,7 +617,10 @@ class _ExploreScreenState extends State<ExploreScreen>
             ),
             const SizedBox(height: 24),
             ElevatedButton(
-              onPressed: _loadData,
+              onPressed: () async {
+                await _youtubeService.clearCache();
+                await _loadData();
+              },
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primaryAccent,
                 foregroundColor: Colors.white,

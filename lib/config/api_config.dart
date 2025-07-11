@@ -7,5 +7,5 @@ class ApiConfig {
   static const String channelId = 'UChMsjzqgMrj4laOTWYyJBQw';
 
   // Add debugging flag
-  static const bool enableDebugLogging = true;
+  static const bool enableDebugLogging = false;
 }
