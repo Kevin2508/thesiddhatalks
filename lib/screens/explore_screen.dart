@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:shimmer/shimmer.dart';
 import '../utils/app_colors.dart';
 import '../models/youtube_models.dart';
 import '../services/youtube_service.dart';
@@ -25,19 +26,11 @@ class _ExploreScreenState extends State<ExploreScreen>
   List<YouTubeVideo> _filteredVideos = [];
   List<PlaylistInfo> _playlists = [];
   Map<String, List<YouTubeVideo>> _categorizedVideos = {};
+  List<String> _categories = ['All'];
 
   bool _isLoading = true;
   bool _isSearching = false;
   String? _error;
-
-  final List<String> _categories = [
-    'All',
-    'Meditation',
-    'Philosophy',
-    'Daily Wisdom',
-    'Discourses',
-    'Q&A Sessions',
-  ];
 
   @override
   void initState() {
@@ -66,32 +59,49 @@ class _ExploreScreenState extends State<ExploreScreen>
       // Load all playlists
       final playlists = await _youtubeService.getChannelPlaylists();
 
-      // Load all recent uploads
-      final uploads = await _youtubeService.getChannelUploads(maxResults: 50);
-
-      // Categorize videos based on title and description
+      // Build categories from playlist names
+      final categories = ['All'];
       final categorizedVideos = <String, List<YouTubeVideo>>{};
+      final allVideos = <YouTubeVideo>[];
 
-      for (final category in _categories) {
-        if (category == 'All') continue;
-
-        categorizedVideos[category] = uploads.where((video) {
-          final videoCategory = VideoCategory.categorizeVideo(
-              video.title,
-              video.description
+      // Load videos for each playlist and use playlist names as categories
+      for (final playlist in playlists) {
+        try {
+          final videos = await _youtubeService.getPlaylistVideos(
+            playlist.id,
+            maxResults: 50,
           );
-          return videoCategory == category;
-        }).toList();
+
+          if (videos.isNotEmpty) {
+            categories.add(playlist.title);
+            categorizedVideos[playlist.title] = videos;
+            allVideos.addAll(videos);
+          }
+        } catch (e) {
+          print('Error loading videos for playlist ${playlist.title}: $e');
+        }
+      }
+
+      // Remove duplicates from allVideos based on video ID
+      final uniqueVideos = <String, YouTubeVideo>{};
+      for (final video in allVideos) {
+        uniqueVideos[video.id] = video;
       }
 
       setState(() {
         _playlists = playlists;
-        _allVideos = uploads;
+        _categories = categories;
+        _allVideos = uniqueVideos.values.toList();
         _categorizedVideos = categorizedVideos;
-        _filteredVideos = uploads;
+        _filteredVideos = uniqueVideos.values.toList();
         _isLoading = false;
       });
+
+      print('Total categories loaded: ${_categories.length}');
+      print('Total unique videos loaded: ${_allVideos.length}');
+
     } catch (e) {
+      print('Error in _loadData: $e');
       setState(() {
         _error = e.toString();
         _isLoading = false;
@@ -162,7 +172,7 @@ class _ExploreScreenState extends State<ExploreScreen>
               _buildHeader(),
 
               // Category Filter
-              _buildCategoryFilter(),
+              if (!_isLoading) _buildCategoryFilter(),
 
               const SizedBox(height: 20),
 
@@ -183,17 +193,6 @@ class _ExploreScreenState extends State<ExploreScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Add this in your _buildHeader() method temporarily
-          ElevatedButton(
-            onPressed: () async {
-              final result = await _youtubeService.testApiAndGetChannelId();
-              print('🔍 API Test Result: $result');
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Check debug console for results')),
-              );
-            },
-            child: Text('Test API'),
-          ),
           Row(
             children: [
               Expanded(
@@ -291,8 +290,10 @@ class _ExploreScreenState extends State<ExploreScreen>
   }
 
   Widget _buildCategoryFilter() {
+    if (_categories.length <= 1) return const SizedBox.shrink();
+
     return SizedBox(
-      height: 60,
+      height: 50,
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -319,8 +320,8 @@ class _ExploreScreenState extends State<ExploreScreen>
               },
               child: Container(
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: 12,
+                  horizontal: 16,
+                  vertical: 8,
                 ),
                 decoration: BoxDecoration(
                   color: isSelected
@@ -334,7 +335,7 @@ class _ExploreScreenState extends State<ExploreScreen>
                     width: 1,
                   ),
                 ),
-                child: Column(
+                child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
@@ -347,16 +348,31 @@ class _ExploreScreenState extends State<ExploreScreen>
                             : AppColors.textPrimary,
                       ),
                     ),
-                    if (videoCount > 0)
-                      Text(
-                        '$videoCount',
-                        style: GoogleFonts.lato(
-                          fontSize: 12,
+                    if (videoCount > 0) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
                           color: isSelected
-                              ? Colors.white70
-                              : AppColors.textSecondary,
+                              ? Colors.white.withOpacity(0.2)
+                              : AppColors.primaryAccent.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          '$videoCount',
+                          style: GoogleFonts.lato(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: isSelected
+                                ? Colors.white
+                                : AppColors.primaryAccent,
+                          ),
                         ),
                       ),
+                    ],
                   ],
                 ),
               ),
@@ -373,7 +389,7 @@ class _ExploreScreenState extends State<ExploreScreen>
     }
 
     if (_isLoading) {
-      return _buildLoadingWidget();
+      return _buildSkeletonLoading();
     }
 
     return AnimatedBuilder(
@@ -391,13 +407,133 @@ class _ExploreScreenState extends State<ExploreScreen>
     );
   }
 
+  Widget _buildSkeletonLoading() {
+    return GridView.builder(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      physics: const BouncingScrollPhysics(),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        childAspectRatio: 0.7,
+        crossAxisSpacing: 16,
+        mainAxisSpacing: 16,
+      ),
+      itemCount: 8,
+      itemBuilder: (context, index) => _buildVideoCardSkeleton(),
+    );
+  }
+
+  Widget _buildVideoCardSkeleton() {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surfaceBackground,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Thumbnail skeleton
+          Expanded(
+            flex: 3,
+            child: Shimmer.fromColors(
+              baseColor: AppColors.textSecondary.withOpacity(0.1),
+              highlightColor: AppColors.textSecondary.withOpacity(0.2),
+              child: Container(
+                width: double.infinity,
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.only(
+                    topLeft: Radius.circular(16),
+                    topRight: Radius.circular(16),
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          // Content skeleton
+          Expanded(
+            flex: 2,
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Category badge skeleton
+                  Shimmer.fromColors(
+                    baseColor: AppColors.textSecondary.withOpacity(0.1),
+                    highlightColor: AppColors.textSecondary.withOpacity(0.2),
+                    child: Container(
+                      width: 80,
+                      height: 20,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 8),
+
+                  // Title skeleton
+                  Shimmer.fromColors(
+                    baseColor: AppColors.textSecondary.withOpacity(0.1),
+                    highlightColor: AppColors.textSecondary.withOpacity(0.2),
+                    child: Container(
+                      width: double.infinity,
+                      height: 16,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 6),
+
+                  Shimmer.fromColors(
+                    baseColor: AppColors.textSecondary.withOpacity(0.1),
+                    highlightColor: AppColors.textSecondary.withOpacity(0.2),
+                    child: Container(
+                      width: 100,
+                      height: 14,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+                  ),
+
+                  const Spacer(),
+
+                  // Stats skeleton
+                  Shimmer.fromColors(
+                    baseColor: AppColors.textSecondary.withOpacity(0.1),
+                    highlightColor: AppColors.textSecondary.withOpacity(0.2),
+                    child: Container(
+                      width: 60,
+                      height: 12,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildVideoGrid() {
     return GridView.builder(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       physics: const BouncingScrollPhysics(),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 2,
-        childAspectRatio: 0.75,
+        childAspectRatio: 0.7, // Adjusted for better title visibility
         crossAxisSpacing: 16,
         mainAxisSpacing: 16,
       ),
@@ -405,11 +541,21 @@ class _ExploreScreenState extends State<ExploreScreen>
       itemBuilder: (context, index) {
         return ExploreVideoCard(
           video: _filteredVideos[index],
+          category: _getCategoryForVideo(_filteredVideos[index]),
           animationDelay: index * 50,
           onTap: () => _playVideo(_filteredVideos[index]),
         );
       },
     );
+  }
+
+  String _getCategoryForVideo(YouTubeVideo video) {
+    for (final entry in _categorizedVideos.entries) {
+      if (entry.value.any((v) => v.id == video.id)) {
+        return entry.key;
+      }
+    }
+    return 'General';
   }
 
   Widget _buildEmptyState() {
@@ -506,27 +652,6 @@ class _ExploreScreenState extends State<ExploreScreen>
     );
   }
 
-  Widget _buildLoadingWidget() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          CircularProgressIndicator(
-            valueColor: AlwaysStoppedAnimation<Color>(AppColors.primaryAccent),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'Loading spiritual content...',
-            style: GoogleFonts.lato(
-              fontSize: 16,
-              color: AppColors.textSecondary,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   void _playVideo(YouTubeVideo video) {
     Navigator.push(
       context,
@@ -546,12 +671,14 @@ class _ExploreScreenState extends State<ExploreScreen>
 
 class ExploreVideoCard extends StatefulWidget {
   final YouTubeVideo video;
+  final String category;
   final int animationDelay;
   final VoidCallback onTap;
 
   const ExploreVideoCard({
     Key? key,
     required this.video,
+    required this.category,
     this.animationDelay = 0,
     required this.onTap,
   }) : super(key: key);
@@ -610,11 +737,6 @@ class _ExploreVideoCardState extends State<ExploreVideoCard>
 
   @override
   Widget build(BuildContext context) {
-    final category = VideoCategory.categorizeVideo(
-        widget.video.title,
-        widget.video.description
-    );
-
     return AnimatedBuilder(
       animation: _entranceAnimation,
       builder: (context, child) {
@@ -657,24 +779,24 @@ class _ExploreVideoCardState extends State<ExploreVideoCard>
                         boxShadow: [
                           BoxShadow(
                             color: _isPressed
-                                ? AppColors.primaryAccent.withOpacity(0.3)
+                                ? AppColors.primaryAccent.withOpacity(0.2)
                                 : AppColors.shadowLight,
-                            blurRadius: _isPressed ? 15 : 8,
-                            spreadRadius: _isPressed ? 2 : 0,
-                            offset: Offset(0, _isPressed ? 4 : 2),
+                            blurRadius: _isPressed ? 12 : 6,
+                            spreadRadius: _isPressed ? 1 : 0,
+                            offset: Offset(0, _isPressed ? 3 : 2),
                           ),
                         ],
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Custom Thumbnail (replacing YouTubeVideoCard)
+                          // Thumbnail
                           Expanded(
                             flex: 3,
                             child: _buildThumbnail(),
                           ),
 
-                          // Content
+                          // Content - Increased space for better title visibility
                           Expanded(
                             flex: 2,
                             child: Padding(
@@ -686,45 +808,49 @@ class _ExploreVideoCardState extends State<ExploreVideoCard>
                                   Container(
                                     padding: const EdgeInsets.symmetric(
                                       horizontal: 8,
-                                      vertical: 4,
+                                      vertical: 3,
                                     ),
                                     decoration: BoxDecoration(
-                                      color: AppColors.primaryAccent.withOpacity(0.1),
-                                      borderRadius: BorderRadius.circular(8),
+                                      color: AppColors.primaryAccent.withOpacity(0.15),
+                                      borderRadius: BorderRadius.circular(6),
                                     ),
                                     child: Text(
-                                      category,
+                                      widget.category,
                                       style: GoogleFonts.lato(
                                         fontSize: 10,
                                         color: AppColors.primaryAccent,
-                                        fontWeight: FontWeight.w600,
+                                        fontWeight: FontWeight.w700,
                                       ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
 
                                   const SizedBox(height: 8),
 
-                                  // Title
+                                  // Title - More space allocated
                                   Expanded(
                                     child: Text(
                                       widget.video.title,
                                       style: GoogleFonts.lato(
-                                        fontSize: 13,
+                                        fontSize: 14, // Increased font size
                                         fontWeight: FontWeight.w600,
                                         color: AppColors.textPrimary,
                                         height: 1.3,
                                       ),
-                                      maxLines: 2,
+                                      maxLines: 3, // Increased from 2 to 3
                                       overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
 
-                                  // Stats
+                                  const SizedBox(height: 8),
+
+                                  // Stats row
                                   Row(
                                     children: [
                                       Icon(
                                         Icons.visibility,
-                                        size: 12,
+                                        size: 14,
                                         color: AppColors.textSecondary,
                                       ),
                                       const SizedBox(width: 4),
@@ -732,11 +858,32 @@ class _ExploreVideoCardState extends State<ExploreVideoCard>
                                         child: Text(
                                           _formatViewCount(widget.video.viewCount),
                                           style: GoogleFonts.lato(
-                                            fontSize: 11,
+                                            fontSize: 12,
                                             color: AppColors.textSecondary,
+                                            fontWeight: FontWeight.w500,
                                           ),
                                         ),
                                       ),
+                                      // Duration
+                                      if (widget.video.duration.isNotEmpty)
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 6,
+                                            vertical: 2,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: AppColors.textSecondary.withOpacity(0.1),
+                                            borderRadius: BorderRadius.circular(4),
+                                          ),
+                                          child: Text(
+                                            widget.video.duration,
+                                            style: GoogleFonts.lato(
+                                              fontSize: 10,
+                                              color: AppColors.textSecondary,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        ),
                                     ],
                                   ),
                                 ],
@@ -790,11 +937,11 @@ class _ExploreVideoCardState extends State<ExploreVideoCard>
                     color: AppColors.textSecondary,
                     size: 24,
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 4),
                   Text(
-                    'Failed to load',
+                    'Image\nUnavailable',
                     style: GoogleFonts.lato(
-                      fontSize: 12,
+                      fontSize: 10,
                       color: AppColors.textSecondary,
                     ),
                     textAlign: TextAlign.center,
@@ -804,45 +951,50 @@ class _ExploreVideoCardState extends State<ExploreVideoCard>
             ),
           ),
 
-          // Play button overlay
+          // Play button overlay with better visibility
           Center(
             child: Container(
-              padding: const EdgeInsets.all(8),
+              padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.black54,
-                borderRadius: BorderRadius.circular(30),
+                color: Colors.black.withOpacity(0.7),
+                borderRadius: BorderRadius.circular(40),
+                border: Border.all(
+                  color: Colors.white.withOpacity(0.3),
+                  width: 2,
+                ),
               ),
               child: const Icon(
                 Icons.play_arrow,
                 color: Colors.white,
-                size: 32,
+                size: 28,
               ),
             ),
           ),
 
-          // Duration badge
-          Positioned(
-            bottom: 8,
-            right: 8,
-            child: Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 8,
-                vertical: 4,
-              ),
-              decoration: BoxDecoration(
-                color: Colors.black87,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                widget.video.duration,
-                style: GoogleFonts.lato(
-                  fontSize: 12,
-                  color: Colors.white,
-                  fontWeight: FontWeight.w500,
+          // Duration badge (moved to bottom-right for better UX)
+          if (widget.video.duration.isNotEmpty)
+            Positioned(
+              bottom: 8,
+              right: 8,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 6,
+                  vertical: 3,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.8),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  widget.video.duration,
+                  style: GoogleFonts.lato(
+                    fontSize: 11,
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
             ),
-          ),
 
           // New badge
           if (widget.video.isNew)
@@ -857,6 +1009,13 @@ class _ExploreVideoCardState extends State<ExploreVideoCard>
                 decoration: BoxDecoration(
                   color: AppColors.primaryAccent,
                   borderRadius: BorderRadius.circular(8),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.primaryAccent.withOpacity(0.3),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
                 ),
                 child: Text(
                   'NEW',
@@ -875,11 +1034,11 @@ class _ExploreVideoCardState extends State<ExploreVideoCard>
 
   String _formatViewCount(int viewCount) {
     if (viewCount >= 1000000) {
-      return '${(viewCount / 1000000).toStringAsFixed(1)}M';
+      return '${(viewCount / 1000000).toStringAsFixed(1)}M views';
     } else if (viewCount >= 1000) {
-      return '${(viewCount / 1000).toStringAsFixed(1)}K';
+      return '${(viewCount / 1000).toStringAsFixed(1)}K views';
     } else {
-      return '$viewCount';
+      return '$viewCount views';
     }
   }
 
