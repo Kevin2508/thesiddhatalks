@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_linkify/flutter_linkify.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:linkify/linkify.dart';
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -284,7 +286,7 @@ class _PlayerScreenState extends State<PlayerScreen>
           Text(
             widget.video!.title,
             style: GoogleFonts.rajdhani(
-              fontSize: 20,
+              fontSize: 16,
               fontWeight: FontWeight.bold,
               color: AppColors.textPrimary,
             ),
@@ -393,16 +395,7 @@ class _PlayerScreenState extends State<PlayerScreen>
               ],
             ),
             const SizedBox(height: 16),
-            Text(
-              widget.video!.description.isNotEmpty
-                  ? widget.video!.description
-                  : 'Experience this beautiful meditation session designed to bring peace and mindfulness to your day.',
-              style: GoogleFonts.lato(
-                fontSize: 16,
-                color: AppColors.textPrimary,
-                height: 1.6,
-              ),
-            ),
+            _buildClickableDescription(),
             const SizedBox(height: 20),
             Row(
               children: [
@@ -420,6 +413,35 @@ class _PlayerScreenState extends State<PlayerScreen>
     );
   }
 
+  Widget _buildClickableDescription() {
+    final description = widget.video!.description.isNotEmpty
+        ? widget.video!.description
+        : 'Experience this beautiful meditation session designed to bring peace and mindfulness to your day.';
+
+    return Linkify(
+      onOpen: (link) async {
+        if (await canLaunchUrl(Uri.parse(link.url))) {
+          await launchUrl(
+            Uri.parse(link.url),
+            mode: LaunchMode.externalApplication,
+          );
+        }
+      },
+      text: description,
+      style: GoogleFonts.lato(
+        fontSize: 16,
+        color: AppColors.textPrimary,
+        height: 1.6,
+      ),
+      linkStyle: GoogleFonts.lato(
+        fontSize: 16,
+        color: AppColors.primaryAccent,
+        height: 1.6,
+        decoration: TextDecoration.underline,
+      ),
+      options: const LinkifyOptions(humanize: false),
+    );
+  }
   Widget _buildRelatedTab() {
     if (_isLoadingRelated) {
       return const Center(
@@ -446,7 +468,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   }
 
   Widget _buildCommentsTab() {
-    return Center(
+    return SingleChildScrollView(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
@@ -491,7 +513,9 @@ class _PlayerScreenState extends State<PlayerScreen>
               ),
             ),
           ),
+          const SizedBox(height: 60),
         ],
+
       ),
     );
   }

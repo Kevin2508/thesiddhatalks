@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../utils/app_colors.dart';
-import '../utils/meditation_quotes.dart';
 
 class GreetingSection extends StatefulWidget {
   const GreetingSection({Key? key}) : super(key: key);
@@ -15,13 +15,13 @@ class _GreetingSectionState extends State<GreetingSection>
   late PageController _pageController;
   late AnimationController _fadeController;
   late Animation<double> _fadeAnimation;
-  int _currentQuoteIndex = 0;
-  List<Map<String, String>> _dailyQuotes = [];
+  int _currentImageIndex = 0;
+  List<Map<String, String>> _dailyQuoteImages = [];
 
   @override
   void initState() {
     super.initState();
-    _dailyQuotes = MeditationQuotes.getDailyQuotes();
+    _dailyQuoteImages = _getDailyQuoteImages();
     _pageController = PageController();
 
     _fadeController = AnimationController(
@@ -37,36 +37,95 @@ class _GreetingSectionState extends State<GreetingSection>
       curve: Curves.easeInOut,
     ));
 
-    // Start auto-swiping quotes
+    // Start auto-swiping images
     _startAutoSwipe();
     _fadeController.forward();
   }
 
+  List<Map<String, String>> _getDailyQuoteImages() {
+    // Get current day of year to determine which quote to show
+    final now = DateTime.now();
+    final dayOfYear = now.difference(DateTime(now.year, 1, 1)).inDays + 1;
+
+    // List of quote image pairs (you can expand this list)
+    final allQuoteImages = [
+      {
+        'hindi': 'assets/quotes/quote1_hindi.jpg',
+        'english': 'assets/quotes/quote1_english.jpeg',
+        'title': 'Inner Peace',
+      },
+      {
+        'hindi': 'assets/quotes/quote2_hindi.jpg',
+        'english': 'assets/quotes/quote2_english.jpeg',
+        'title': 'Meditation',
+      },
+      {
+        'hindi': 'assets/quotes/quote3_hindi.jpeg',
+        'english': 'assets/quotes/quote3_english.jpeg',
+        'title': 'Wisdom',
+      },
+      {
+        'hindi': 'assets/quotes/quote4_hindi.jpeg',
+        'english': 'assets/quotes/quote4_english.jpeg',
+        'title': 'Mindfulness',
+      },
+      {
+        'hindi': 'assets/quotes/quote5_hindi.jpeg',
+        'english': 'assets/quotes/quote5_english.jpeg',
+        'title': 'Enlightenment',
+      },
+      {
+        'hindi': 'assets/quotes/quote6_hindi.jpeg',
+        'english': 'assets/quotes/quote6_english.jpeg',
+        'title': 'Enlightenment',
+      },
+      // Add more quote image pairs as needed
+    ];
+
+    // Select quote based on day of year (cycles through available quotes)
+    final selectedQuoteIndex = (dayOfYear - 1) % allQuoteImages.length;
+    final selectedQuote = allQuoteImages[selectedQuoteIndex];
+
+    // Return both Hindi and English images for today's quote
+    return [
+      {
+        'image': selectedQuote['hindi']!,
+        'language': 'Hindi',
+        'title': selectedQuote['title']!,
+      },
+      {
+        'image': selectedQuote['english']!,
+        'language': 'English',
+        'title': selectedQuote['title']!,
+      },
+    ];
+  }
+
   void _startAutoSwipe() {
-    Future.delayed(const Duration(seconds: 4), () {
+    Future.delayed(const Duration(seconds: 5), () {
       if (mounted) {
-        _nextQuote();
+        _nextImage();
       }
     });
   }
 
-  void _nextQuote() {
+  void _nextImage() {
     if (!mounted) return;
 
     setState(() {
-      _currentQuoteIndex = (_currentQuoteIndex + 1) % _dailyQuotes.length;
+      _currentImageIndex = (_currentImageIndex + 1) % _dailyQuoteImages.length;
     });
 
     _pageController.animateToPage(
-      _currentQuoteIndex,
+      _currentImageIndex,
       duration: const Duration(milliseconds: 800),
       curve: Curves.easeInOutCubic,
     );
 
-    // Schedule next quote
-    Future.delayed(const Duration(seconds: 4), () {
+    // Schedule next image
+    Future.delayed(const Duration(seconds: 5), () {
       if (mounted) {
-        _nextQuote();
+        _nextImage();
       }
     });
   }
@@ -89,7 +148,7 @@ class _GreetingSectionState extends State<GreetingSection>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Time-based greeting with reduced font size
+          // Time-based greeting
           Text(
             _getTimeBasedGreeting(),
             style: GoogleFonts.rajdhani(
@@ -101,11 +160,10 @@ class _GreetingSectionState extends State<GreetingSection>
 
           const SizedBox(height: 16),
 
-          // Today's Wisdom with auto-swiping quotes
+          // Today's Wisdom with auto-swiping quote images
           Container(
             width: double.infinity,
-            height: 200, // Fixed height for consistent UI
-            padding: const EdgeInsets.all(20),
+            height: 380, // Increased height for better image display
             decoration: BoxDecoration(
               color: AppColors.surfaceBackground,
               borderRadius: BorderRadius.circular(16),
@@ -124,101 +182,223 @@ class _GreetingSectionState extends State<GreetingSection>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: AppColors.primaryAccent.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(8),
+                // Header
+                Padding(
+                  padding: const EdgeInsets.only(top: 16, left: 16, right: 16, bottom: 6),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: AppColors.primaryAccent.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Icon(
+                          Icons.auto_awesome,
+                          color: AppColors.primaryAccent,
+                          size: 20,
+                        ),
                       ),
-                      child: Icon(
-                        Icons.auto_awesome,
-                        color: AppColors.primaryAccent,
-                        size: 20,
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Today\'s Wisdom',
+                              style: GoogleFonts.lato(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                            if (_dailyQuoteImages.isNotEmpty)
+                              Text(
+                                _dailyQuoteImages[_currentImageIndex]['title']!,
+                                style: GoogleFonts.lato(
+                                  fontSize: 12,
+                                  color: AppColors.primaryAccent,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                          ],
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    Text(
-                      'Today\'s Wisdom',
-                      style: GoogleFonts.lato(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                    const Spacer(),
-                    // Quote indicator dots
-                    Row(
-                      children: List.generate(
-                        _dailyQuotes.length,
-                            (index) => Container(
-                          margin: const EdgeInsets.only(left: 4),
-                          width: 6,
-                          height: 6,
-                          decoration: BoxDecoration(
-                            color: index == _currentQuoteIndex
-                                ? AppColors.primaryAccent
-                                : AppColors.textSecondary.withOpacity(0.3),
-                            shape: BoxShape.circle,
+                      // Language indicator
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.primaryAccent.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          _dailyQuoteImages.isNotEmpty
+                              ? _dailyQuoteImages[_currentImageIndex]['language']!
+                              : 'EN',
+                          style: GoogleFonts.lato(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.primaryAccent,
                           ),
                         ),
                       ),
-                    ),
-                  ],
-                ),
-
-                const SizedBox(height: 5),
-
-                // Auto-swiping quotes
-                Expanded(
-                  child: PageView.builder(
-                    controller: _pageController,
-                    onPageChanged: (index) {
-                      setState(() {
-                        _currentQuoteIndex = index;
-                      });
-                    },
-                    itemCount: _dailyQuotes.length,
-                    itemBuilder: (context, index) {
-                      final quote = _dailyQuotes[index];
-                      return FadeTransition(
-                        opacity: _fadeAnimation,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              quote['hindi']!,
-                              style: GoogleFonts.tiroDevanagariHindi(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w500,
-                                color: AppColors.meditationGold,
-                                height: 1.4,
-                              ),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              quote['english']!,
-                              style: GoogleFonts.lato(
-                                fontSize: 14,
-                                fontStyle: FontStyle.italic,
-                                color: AppColors.textSecondary,
-                                height: 1.3,
-                              ),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ],
-                        ),
-                      );
-                    },
+                    ],
                   ),
                 ),
 
+                // Auto-swiping quote images
+                Expanded(
+                  child: Stack(
+                    children: [
+                      PageView.builder(
+                        controller: _pageController,
+                        onPageChanged: (index) {
+                          setState(() {
+                            _currentImageIndex = index;
+                          });
+                        },
+                        itemCount: _dailyQuoteImages.length,
+                        itemBuilder: (context, index) {
+                          final quoteImage = _dailyQuoteImages[index];
+                          return FadeTransition(
+                            opacity: _fadeAnimation,
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 16),
+                              child: _buildQuoteImage(quoteImage),
+                            ),
+                          );
+                        },
+                      ),
+
+                      // Image indicator dots
+                      Positioned(
+                        bottom: 16,
+                        left: 0,
+                        right: 0,
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: List.generate(
+                            _dailyQuoteImages.length,
+                                (index) => Container(
+                              margin: const EdgeInsets.symmetric(horizontal: 3),
+                              width: 8,
+                              height: 8,
+                              decoration: BoxDecoration(
+                                color: index == _currentImageIndex
+                                    ? AppColors.primaryAccent
+                                    : Colors.white.withOpacity(0.4),
+                                shape: BoxShape.circle,
+                                boxShadow: [
+                                  if (index == _currentImageIndex)
+                                    BoxShadow(
+                                      color: AppColors.primaryAccent.withOpacity(0.3),
+                                      blurRadius: 4,
+                                      offset: const Offset(0, 1),
+                                    ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 8),
               ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQuoteImage(Map<String, String> quoteImage) {
+    return ClipRRect(
+      borderRadius: const BorderRadius.only(
+        bottomLeft: Radius.circular(12),
+        bottomRight: Radius.circular(12),
+      ),
+      child: Container(
+        width: double.infinity,
+        height: double.infinity,
+        child: Image.asset(
+          quoteImage['image']!,
+          fit: BoxFit.contain, // Changed from cover to contain
+          alignment: Alignment.center,
+          errorBuilder: (context, error, stackTrace) {
+            return _buildPlaceholder(quoteImage);
+          },
+        ),
+      ),
+    );
+  }
+  Widget _buildPlaceholder(Map<String, String> quoteImage) {
+    return Container(
+      width: double.infinity,
+      height: double.infinity,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            AppColors.primaryAccent.withOpacity(0.1),
+            AppColors.primaryAccent.withOpacity(0.05),
+          ],
+        ),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppColors.primaryAccent.withOpacity(0.1),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              Icons.format_quote,
+              size: 32,
+              color: AppColors.primaryAccent,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Quote Image',
+            style: GoogleFonts.rajdhani(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '${quoteImage['language']} • ${quoteImage['title']}',
+            style: GoogleFonts.lato(
+              fontSize: 14,
+              color: AppColors.textSecondary,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 6,
+            ),
+            decoration: BoxDecoration(
+              color: AppColors.primaryAccent.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              'Image not available',
+              style: GoogleFonts.lato(
+                fontSize: 12,
+                color: AppColors.primaryAccent,
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ),
         ],

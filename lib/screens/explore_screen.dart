@@ -464,7 +464,7 @@ class _ExploreScreenState extends State<ExploreScreen>
                     highlightColor: AppColors.textSecondary.withOpacity(0.2),
                     child: Container(
                       width: 80,
-                      height: 20,
+                      height: 0,
                       decoration: BoxDecoration(
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(8),
