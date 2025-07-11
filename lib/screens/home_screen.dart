@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shimmer/shimmer.dart';
 import '../utils/app_colors.dart';
 import '../widgets/hero_card.dart';
 import '../widgets/greeting_section.dart';
@@ -50,18 +51,28 @@ class _HomeScreenState extends State<HomeScreen>
         _error = null;
       });
 
-      // Load playlists
+      // Load all playlists
       final playlists = await _youtubeService.getChannelPlaylists();
 
-      // Load videos for each playlist (limited for home page)
+      // Load ALL videos for each playlist (since each playlist has only 1-3 videos)
       final Map<String, List<YouTubeVideo>> playlistVideos = {};
 
-      for (final playlist in playlists.take(3)) { // Show only first 3 playlists on home
-        final videos = await _youtubeService.getPlaylistVideos(
-          playlist.id,
-          maxResults: 5, // Show only 5 videos per playlist on home
-        );
-        playlistVideos[playlist.id] = videos;
+      for (final playlist in playlists) {
+        try {
+          // Fetch ALL videos from each playlist (remove maxResults limit or set it high)
+          final videos = await _youtubeService.getPlaylistVideos(
+            playlist.id,
+            maxResults: 50, // Increased limit to ensure we get all videos
+          );
+          playlistVideos[playlist.id] = videos;
+
+          // Debug print to check if videos are being loaded
+          print('Loaded ${videos.length} videos for playlist: ${playlist.title}');
+        } catch (e) {
+          print('Error loading videos for playlist ${playlist.title}: $e');
+          // Continue with empty list for this playlist
+          playlistVideos[playlist.id] = [];
+        }
       }
 
       setState(() {
@@ -69,7 +80,13 @@ class _HomeScreenState extends State<HomeScreen>
         _playlistVideos = playlistVideos;
         _isLoading = false;
       });
+
+      // Debug print to check total playlists and videos loaded
+      print('Total playlists loaded: ${_playlists.length}');
+      print('Playlists with videos: ${_playlistVideos.keys.length}');
+
     } catch (e) {
+      print('Error in _loadData: $e');
       setState(() {
         _error = e.toString();
         _isLoading = false;
@@ -143,13 +160,15 @@ class _HomeScreenState extends State<HomeScreen>
 
                         const SizedBox(height: 24),
 
-                        // Error handling
+                        // Content based on loading state
                         if (_error != null)
                           _buildErrorWidget()
                         else if (_isLoading)
-                          _buildLoadingWidget()
-                        else
-                          ..._buildPlaylistSections(),
+                          _buildSkeletonLoading()
+                        else if (_playlists.isEmpty)
+                            _buildEmptyStateWidget()
+                          else
+                            ..._buildPlaylistSections(),
 
                         // Bottom padding
                         SizedBox(
@@ -167,8 +186,143 @@ class _HomeScreenState extends State<HomeScreen>
     );
   }
 
+  Widget _buildSkeletonLoading() {
+    return Column(
+      children: List.generate(3, (index) => _buildPlaylistSkeleton()),
+    );
+  }
+
+  Widget _buildPlaylistSkeleton() {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Playlist header skeleton
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildSkeletonContainer(
+                      width: 200,
+                      height: 24,
+                      borderRadius: 8,
+                    ),
+                    const SizedBox(height: 8),
+                    _buildSkeletonContainer(
+                      width: 120,
+                      height: 16,
+                      borderRadius: 6,
+                    ),
+                  ],
+                ),
+                _buildSkeletonContainer(
+                  width: 80,
+                  height: 32,
+                  borderRadius: 16,
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 16),
+
+          // Video cards skeleton
+          SizedBox(
+            height: 200,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              itemCount: 3,
+              itemBuilder: (context, index) => _buildVideoCardSkeleton(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildVideoCardSkeleton() {
+    return Container(
+      width: 280,
+      margin: const EdgeInsets.only(right: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Video thumbnail skeleton
+          _buildSkeletonContainer(
+            width: 280,
+            height: 120,
+            borderRadius: 12,
+          ),
+
+          const SizedBox(height: 12),
+
+          // Video title skeleton
+          _buildSkeletonContainer(
+            width: 260,
+            height: 18,
+            borderRadius: 6,
+          ),
+
+          const SizedBox(height: 8),
+
+          // Video description skeleton
+          _buildSkeletonContainer(
+            width: 200,
+            height: 14,
+            borderRadius: 4,
+          ),
+
+          const SizedBox(height: 6),
+
+          // Video duration skeleton
+          _buildSkeletonContainer(
+            width: 80,
+            height: 12,
+            borderRadius: 4,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSkeletonContainer({
+    required double width,
+    required double height,
+    required double borderRadius,
+  }) {
+    return Shimmer.fromColors(
+      baseColor: AppColors.textSecondary.withOpacity(0.1),
+      highlightColor: AppColors.textSecondary.withOpacity(0.2),
+      period: const Duration(milliseconds: 1200),
+      child: Container(
+        width: width,
+        height: height,
+        decoration: BoxDecoration(
+          color: AppColors.textSecondary.withOpacity(0.7),
+          borderRadius: BorderRadius.circular(borderRadius),
+        ),
+      ),
+    );
+  }
+
   List<Widget> _buildPlaylistSections() {
-    return _playlists.take(3).map((playlist) {
+    // Filter out playlists that have no videos
+    final playlistsWithVideos = _playlists.where((playlist) {
+      final videos = _playlistVideos[playlist.id] ?? [];
+      return videos.isNotEmpty;
+    }).toList();
+
+    if (playlistsWithVideos.isEmpty) {
+      return [_buildEmptyStateWidget()];
+    }
+
+    return playlistsWithVideos.map((playlist) {
       final videos = _playlistVideos[playlist.id] ?? [];
 
       return _buildAnimatedSection(
@@ -185,6 +339,56 @@ class _HomeScreenState extends State<HomeScreen>
         ),
       );
     }).toList();
+  }
+
+  Widget _buildEmptyStateWidget() {
+    return Padding(
+      padding: const EdgeInsets.all(20),
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: AppColors.primaryAccent.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppColors.primaryAccent.withOpacity(0.3)),
+        ),
+        child: Column(
+          children: [
+            Icon(
+              Icons.playlist_play,
+              color: AppColors.primaryAccent,
+              size: 48,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'No Playlists Found',
+              style: GoogleFonts.rajdhani(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: AppColors.primaryAccent,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'No video content is available at the moment. Please check back later.',
+              style: GoogleFonts.lato(
+                fontSize: 14,
+                color: AppColors.textSecondary,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: _loadData,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primaryAccent,
+                foregroundColor: Colors.white,
+              ),
+              child: Text('Refresh'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildErrorWidget() {
@@ -233,27 +437,6 @@ class _HomeScreenState extends State<HomeScreen>
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildLoadingWidget() {
-    return Padding(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        children: [
-          CircularProgressIndicator(
-            valueColor: AlwaysStoppedAnimation<Color>(AppColors.primaryAccent),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'Loading meditation content...',
-            style: GoogleFonts.lato(
-              fontSize: 16,
-              color: AppColors.textSecondary,
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -374,11 +557,7 @@ class _PlaylistVideosScreenState extends State<PlaylistVideosScreen> {
         ),
       ),
       body: _isLoading
-          ? const Center(
-        child: CircularProgressIndicator(
-          valueColor: AlwaysStoppedAnimation<Color>(AppColors.primaryAccent),
-        ),
-      )
+          ? _buildPlaylistDetailSkeleton()
           : _error != null
           ? Center(
         child: Column(
@@ -401,6 +580,86 @@ class _PlaylistVideosScreenState extends State<PlaylistVideosScreen> {
             onTap: () => _playVideo(_videos[index]),
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildPlaylistDetailSkeleton() {
+    return ListView.builder(
+      padding: const EdgeInsets.all(20),
+      itemCount: 6,
+      itemBuilder: (context, index) => _buildVideoListItemSkeleton(),
+    );
+  }
+
+  Widget _buildVideoListItemSkeleton() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Thumbnail skeleton
+          Shimmer.fromColors(
+            baseColor: AppColors.textSecondary.withOpacity(0.1),
+            highlightColor: AppColors.textSecondary.withOpacity(0.2),
+            child: Container(
+              width: 120,
+              height: 80,
+              decoration: BoxDecoration(
+                color: AppColors.textSecondary.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+          ),
+
+          const SizedBox(width: 12),
+
+          // Content skeleton
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Shimmer.fromColors(
+                  baseColor: AppColors.textSecondary.withOpacity(0.1),
+                  highlightColor: AppColors.textSecondary.withOpacity(0.2),
+                  child: Container(
+                    height: 18,
+                    decoration: BoxDecoration(
+                      color: AppColors.textSecondary.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Shimmer.fromColors(
+                  baseColor: AppColors.textSecondary.withOpacity(0.1),
+                  highlightColor: AppColors.textSecondary.withOpacity(0.2),
+                  child: Container(
+                    height: 14,
+                    width: double.infinity * 0.7,
+                    decoration: BoxDecoration(
+                      color: AppColors.textSecondary.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Shimmer.fromColors(
+                  baseColor: AppColors.textSecondary.withOpacity(0.1),
+                  highlightColor: AppColors.textSecondary.withOpacity(0.2),
+                  child: Container(
+                    height: 12,
+                    width: 80,
+                    decoration: BoxDecoration(
+                      color: AppColors.textSecondary.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

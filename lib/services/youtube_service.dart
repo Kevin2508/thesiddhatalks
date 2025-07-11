@@ -8,6 +8,140 @@ class YouTubeService {
   static const String _apiKey = ApiConfig.youtubeApiKey;
   static const String _channelId = ApiConfig.channelId;
 
+  void _debugLog(String message) {
+    if (ApiConfig.enableDebugLogging) {
+      print('🔍 YouTubeService: $message');
+    }
+  }
+
+  // Test API connection and get correct channel ID
+  Future<Map<String, dynamic>?> testApiAndGetChannelId() async {
+    try {
+      _debugLog('Testing API connection...');
+
+      // Try to get channel by handle first
+      final handleUrl = Uri.parse(
+          '$_baseUrl/search?part=snippet&q=${ApiConfig.channelHandle}&type=channel&key=$_apiKey'
+      );
+
+      _debugLog('Testing with handle: ${handleUrl.toString()}');
+
+      final handleResponse = await http.get(handleUrl);
+      _debugLog('Handle search response: ${handleResponse.statusCode}');
+
+      if (handleResponse.statusCode == 200) {
+        final handleData = json.decode(handleResponse.body);
+        _debugLog('Handle search result: ${handleData.toString()}');
+
+        final items = handleData['items'] as List?;
+        if (items != null && items.isNotEmpty) {
+          final channelId = items.first['snippet']['channelId'];
+          _debugLog('Found channel ID from handle: $channelId');
+
+          // Now test with this channel ID
+          return await _testChannelId(channelId);
+        }
+      }
+
+      // If handle search failed, try with current channel ID
+      _debugLog('Handle search failed, testing current channel ID: $_channelId');
+      return await _testChannelId(_channelId);
+
+    } catch (e) {
+      _debugLog('Error in testApiAndGetChannelId: $e');
+      return null;
+    }
+  }
+
+  Future<Map<String, dynamic>?> _testChannelId(String channelId) async {
+    try {
+      final url = Uri.parse(
+          '$_baseUrl/channels?part=snippet,statistics&id=$channelId&key=$_apiKey'
+      );
+
+      _debugLog('Testing channel ID: $channelId');
+      _debugLog('URL: ${url.toString()}');
+
+      final response = await http.get(url);
+      _debugLog('Channel test response: ${response.statusCode}');
+      _debugLog('Response body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final items = data['items'] as List?;
+
+        if (items != null && items.isNotEmpty) {
+          final channel = items.first;
+          final result = {
+            'success': true,
+            'id': channel['id'],
+            'title': channel['snippet']['title'],
+            'description': channel['snippet']['description'],
+            'subscriberCount': channel['statistics']['subscriberCount'] ?? '0',
+            'videoCount': channel['statistics']['videoCount'] ?? '0',
+            'thumbnail': channel['snippet']['thumbnails']['high']['url'],
+          };
+          _debugLog('✅ Channel found successfully: ${channel['snippet']['title']}');
+          return result;
+        }
+      } else {
+        _debugLog('❌ API Error: ${response.statusCode} - ${response.body}');
+      }
+
+      return {'success': false, 'error': 'Channel not found'};
+    } catch (e) {
+      _debugLog('❌ Exception in _testChannelId: $e');
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  // Get channel uploads with better error handling
+  Future<List<YouTubeVideo>> getChannelUploads({int maxResults = 20}) async {
+    try {
+      _debugLog('Getting channel uploads...');
+
+      // First test the connection
+      final testResult = await testApiAndGetChannelId();
+      if (testResult == null || testResult['success'] != true) {
+        throw Exception('Channel not accessible: ${testResult?['error'] ?? 'Unknown error'}');
+      }
+
+      final workingChannelId = testResult['id'];
+      _debugLog('Using channel ID: $workingChannelId');
+
+      // Get uploads playlist ID
+      final channelUrl = Uri.parse(
+          '$_baseUrl/channels?part=contentDetails&id=$workingChannelId&key=$_apiKey'
+      );
+
+      final channelResponse = await http.get(channelUrl);
+      _debugLog('Channel details response: ${channelResponse.statusCode}');
+
+      if (channelResponse.statusCode == 200) {
+        final channelData = json.decode(channelResponse.body);
+        final items = channelData['items'] as List?;
+
+        if (items != null && items.isNotEmpty) {
+          final uploadsPlaylistId = items.first['contentDetails']['relatedPlaylists']['uploads'] as String;
+          _debugLog('Found uploads playlist: $uploadsPlaylistId');
+
+          return await getPlaylistVideos(uploadsPlaylistId, maxResults: maxResults);
+        }
+      }
+
+      // Fallback to search
+      _debugLog('Falling back to search method...');
+      return await getLatestVideos(maxResults: maxResults);
+
+    } catch (e) {
+      _debugLog('❌ Error in getChannelUploads: $e');
+      throw Exception('Error fetching channel uploads: $e');
+    }
+  }
+
+  // Your existing methods (getChannelPlaylists, getPlaylistVideos, etc.)
+  // ... keep all your existing methods as they are ...
+
   // Get channel playlists
   Future<List<PlaylistInfo>> getChannelPlaylists() async {
     try {
@@ -57,6 +191,8 @@ class YouTubeService {
   // Get detailed video information including duration
   Future<List<YouTubeVideo>> getVideoDetails(List<String> videoIds) async {
     try {
+      if (videoIds.isEmpty) return [];
+
       final videoIdsString = videoIds.join(',');
       final url = Uri.parse(
           '$_baseUrl/videos?part=snippet,contentDetails,statistics&id=$videoIdsString&key=$_apiKey'
@@ -123,39 +259,7 @@ class YouTubeService {
     }
   }
 
-  // ADD THESE MISSING METHODS:
-
-  // Get channel uploads (all videos from uploads playlist)
-  Future<List<YouTubeVideo>> getChannelUploads({int maxResults = 20}) async {
-    try {
-      // First get the uploads playlist ID
-      final channelUrl = Uri.parse(
-          '$_baseUrl/channels?part=contentDetails&id=$_channelId&key=$_apiKey'
-      );
-
-      final channelResponse = await http.get(channelUrl);
-
-      if (channelResponse.statusCode == 200) {
-        final channelData = json.decode(channelResponse.body);
-        final items = channelData['items'] as List?;
-
-        if (items != null && items.isNotEmpty) {
-          final uploadsPlaylistId = items.first['contentDetails']['relatedPlaylists']['uploads'] as String;
-
-          // Now get videos from uploads playlist
-          return await getPlaylistVideos(uploadsPlaylistId, maxResults: maxResults);
-        }
-      }
-
-      // Fallback to search if uploads playlist not found
-      return await getLatestVideos(maxResults: maxResults);
-    } catch (e) {
-      // Fallback to latest videos if uploads playlist fails
-      return await getLatestVideos(maxResults: maxResults);
-    }
-  }
-
-  // Get channel information
+  // Get channel info
   Future<Map<String, dynamic>?> getChannelInfo() async {
     try {
       final url = Uri.parse(
@@ -174,36 +278,16 @@ class YouTubeService {
             'id': channel['id'],
             'title': channel['snippet']['title'],
             'description': channel['snippet']['description'],
-            'subscriberCount': channel['statistics']['subscriberCount'],
-            'videoCount': channel['statistics']['videoCount'],
+            'subscriberCount': channel['statistics']['subscriberCount'] ?? '0',
+            'videoCount': channel['statistics']['videoCount'] ?? '0',
             'thumbnail': channel['snippet']['thumbnails']['high']['url'],
           };
         }
       }
       return null;
     } catch (e) {
-      print('Error getting channel info: $e');
+      _debugLog('Error getting channel info: $e');
       return null;
-    }
-  }
-
-  // Get videos by category (helper method)
-  Future<List<YouTubeVideo>> getVideosByCategory(String category, {int maxResults = 10}) async {
-    try {
-      if (category == 'All') {
-        return await getChannelUploads(maxResults: maxResults);
-      }
-
-      // Search for videos in the category
-      final keywords = VideoCategory.categoryKeywords[category] ?? [];
-      if (keywords.isNotEmpty) {
-        final query = keywords.join(' OR ');
-        return await searchChannelVideos(query, maxResults: maxResults);
-      }
-
-      return await getChannelUploads(maxResults: maxResults);
-    } catch (e) {
-      throw Exception('Error fetching videos by category: $e');
     }
   }
 }

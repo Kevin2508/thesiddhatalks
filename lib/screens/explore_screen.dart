@@ -183,6 +183,17 @@ class _ExploreScreenState extends State<ExploreScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Add this in your _buildHeader() method temporarily
+          ElevatedButton(
+            onPressed: () async {
+              final result = await _youtubeService.testApiAndGetChannelId();
+              print('🔍 API Test Result: $result');
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Check debug console for results')),
+              );
+            },
+            child: Text('Test API'),
+          ),
           Row(
             children: [
               Expanded(

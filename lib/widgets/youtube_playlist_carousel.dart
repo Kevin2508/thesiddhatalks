@@ -202,7 +202,7 @@ class _YouTubeVideoCardState extends State<YouTubeVideoCard>
                 children: [
                   // Thumbnail
                   Container(
-                    height: 120,
+                    height: 125,
                     width: double.infinity,
                     child: Stack(
                       children: [
@@ -324,31 +324,31 @@ class _YouTubeVideoCardState extends State<YouTubeVideoCard>
                             overflow: TextOverflow.ellipsis,
                           ),
                           const Spacer(),
-                          Row(
-                            children: [
-                              Icon(
-                                Icons.visibility,
-                                size: 12,
-                                color: AppColors.textSecondary,
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                _formatViewCount(widget.video.viewCount),
-                                style: GoogleFonts.lato(
-                                  fontSize: 11,
-                                  color: AppColors.textSecondary,
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Text(
-                                _timeAgo(widget.video.publishedAt),
-                                style: GoogleFonts.lato(
-                                  fontSize: 11,
-                                  color: AppColors.textSecondary,
-                                ),
-                              ),
-                            ],
-                          ),
+                          // Row(
+                          //   children: [
+                          //     Icon(
+                          //       Icons.visibility,
+                          //       size: 12,
+                          //       color: AppColors.textSecondary,
+                          //     ),
+                          //     const SizedBox(width: 4),
+                          //     Text(
+                          //       _formatViewCount(widget.video.viewCount),
+                          //       style: GoogleFonts.lato(
+                          //         fontSize: 11,
+                          //         color: AppColors.textSecondary,
+                          //       ),
+                          //     ),
+                          //     const SizedBox(width: 12),
+                          //     Text(
+                          //       _timeAgo(widget.video.publishedAt),
+                          //       style: GoogleFonts.lato(
+                          //         fontSize: 11,
+                          //         color: AppColors.textSecondary,
+                          //       ),
+                          //     ),
+                          //   ],
+                          // ),
                         ],
                       ),
                     ),
