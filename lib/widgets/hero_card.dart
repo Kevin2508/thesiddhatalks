@@ -6,6 +6,7 @@ import '../utils/app_colors.dart';
 import '../models/youtube_models.dart';
 import '../services/youtube_service.dart';
 import '../screens/player_screen.dart';
+import 'watchlist_button.dart';
 
 class HeroCard extends StatefulWidget {
   const HeroCard({Key? key}) : super(key: key);
@@ -353,33 +354,43 @@ class _HeroCardState extends State<HeroCard> with TickerProviderStateMixin {
 
                       const SizedBox(height: 16),
 
-                      // Watch Live button
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton.icon(
-                          onPressed: () {
-                            HapticFeedback.mediumImpact();
-                            _playLiveStream(liveStream);
-                          },
-                          icon: const Icon(Icons.play_arrow, size: 20),
-                          label: Text(
-                            'Watch Live Now',
-                            style: GoogleFonts.lato(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
+                      // Action buttons row
+                      Row(
+                        children: [
+                          // Watchlist button
+                          WatchlistButton(
+                            video: liveStream.toYouTubeVideo(),
+                            size: 20,
+                          ),
+                          const SizedBox(width: 12),
+                          // Watch Live button
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              onPressed: () {
+                                HapticFeedback.mediumImpact();
+                                _playLiveStream(liveStream);
+                              },
+                              icon: const Icon(Icons.play_arrow, size: 20),
+                              label: Text(
+                                'Watch Live Now',
+                                style: GoogleFonts.lato(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                ),
+                              ),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.red,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(vertical: 16),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(15),
+                                ),
+                                elevation: 8,
+                                shadowColor: Colors.red.withOpacity(0.4),
+                              ),
                             ),
                           ),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.red,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(15),
-                            ),
-                            elevation: 8,
-                            shadowColor: Colors.red.withOpacity(0.4),
-                          ),
-                        ),
+                        ],
                       ),
                     ],
                   ),

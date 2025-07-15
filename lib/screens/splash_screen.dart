@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
 import '../utils/app_colors.dart';
+import '../providers/auth_provider.dart';
+import '../services/auth_service.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({Key? key}) : super(key: key);
@@ -54,9 +57,33 @@ class _SplashScreenState extends State<SplashScreen>
     _fadeController.forward();
     _scaleController.forward();
 
-    await Future.delayed(const Duration(milliseconds: 2700));
+    // Wait for minimum splash duration
+    await Future.delayed(const Duration(milliseconds: 3000));
+    
     if (mounted) {
-      Navigator.of(context).pushReplacementNamed('/home');
+      _checkAuthAndNavigate();
+    }
+  }
+
+  void _checkAuthAndNavigate() {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    
+    // Check auth status and navigate accordingly
+    switch (authProvider.status) {
+      case AuthStatus.authenticated:
+        Navigator.of(context).pushReplacementNamed('/welcome');
+        break;
+      case AuthStatus.unauthenticated:
+        Navigator.of(context).pushReplacementNamed('/login');
+        break;
+      case AuthStatus.loading:
+        // If still loading, wait a bit more and check again
+        Future.delayed(const Duration(milliseconds: 1000), () {
+          if (mounted) {
+            _checkAuthAndNavigate();
+          }
+        });
+        break;
     }
   }
 
@@ -118,18 +145,6 @@ class _SplashScreenState extends State<SplashScreen>
 
                                 ),
                                 textAlign: TextAlign.center,
-                              ),
-
-                              const SizedBox(height: 20),
-
-                              // Namaste greeting
-                              Text(
-                                'नमस्ते',
-                                style: GoogleFonts.tiroDevanagariHindi(
-                                  fontSize: 28,
-                                  color: AppColors.meditationGold,
-                                  fontWeight: FontWeight.w500,
-                                ),
                               ),
                             ],
                           ),

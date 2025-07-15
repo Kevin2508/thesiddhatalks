@@ -4,6 +4,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../utils/app_colors.dart';
 import '../models/youtube_models.dart';
 import '../screens/player_screen.dart';
+import 'watchlist_button.dart';
 
 class LiveStreamBanner extends StatelessWidget {
   final LiveStream liveStream;
@@ -130,6 +131,12 @@ class LiveStreamBanner extends StatelessWidget {
                               ),
                             ),
                             const Spacer(),
+                            // Watchlist button
+                            WatchlistButton(
+                              video: liveStream.toYouTubeVideo(),
+                              size: 16,
+                            ),
+                            const SizedBox(width: 8),
                             Icon(
                               Icons.play_circle_fill,
                               color: liveStream.isLive

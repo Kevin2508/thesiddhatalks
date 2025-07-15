@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+import 'package:provider/provider.dart';
 import '../utils/app_colors.dart';
+import '../providers/auth_provider.dart';
 
 class GreetingSection extends StatefulWidget {
   const GreetingSection({Key? key}) : super(key: key);
@@ -50,12 +51,12 @@ class _GreetingSectionState extends State<GreetingSection>
     // List of quote image pairs (you can expand this list)
     final allQuoteImages = [
       {
-        'hindi': 'assets/quotes/quote1_hindi.jpg',
+        'hindi': 'assets/quotes/quote1_hindi.jpeg',
         'english': 'assets/quotes/quote1_english.jpeg',
         'title': 'Inner Peace',
       },
       {
-        'hindi': 'assets/quotes/quote2_hindi.jpg',
+        'hindi': 'assets/quotes/quote2_hindi.jpeg',
         'english': 'assets/quotes/quote2_english.jpeg',
         'title': 'Meditation',
       },
@@ -74,11 +75,7 @@ class _GreetingSectionState extends State<GreetingSection>
         'english': 'assets/quotes/quote5_english.jpeg',
         'title': 'Enlightenment',
       },
-      {
-        'hindi': 'assets/quotes/quote6_hindi.jpeg',
-        'english': 'assets/quotes/quote6_english.jpeg',
-        'title': 'Enlightenment',
-      },
+      
       // Add more quote image pairs as needed
     ];
 
@@ -130,6 +127,28 @@ class _GreetingSectionState extends State<GreetingSection>
     });
   }
 
+  String _getGreetingWithUsername(BuildContext context) {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final timeGreeting = _getTimeBasedGreeting();
+    
+    final displayName = authProvider.user?.displayName;
+    if (displayName != null && displayName.isNotEmpty) {
+      return '$timeGreeting, $displayName';
+    }
+    
+    final email = authProvider.user?.email;
+    if (email != null && email.isNotEmpty) {
+      // Extract name from email (before @)
+      final emailName = email.split('@')[0];
+      if (emailName.isNotEmpty) {
+        final capitalizedName = emailName[0].toUpperCase() + emailName.substring(1);
+        return '$timeGreeting, $capitalizedName';
+      }
+    }
+    
+    return timeGreeting;
+  }
+
   String _getTimeBasedGreeting() {
     final hour = DateTime.now().hour;
     if (hour < 12) {
@@ -148,13 +167,18 @@ class _GreetingSectionState extends State<GreetingSection>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Time-based greeting
-          Text(
-            _getTimeBasedGreeting(),
-            style: GoogleFonts.rajdhani(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: AppColors.textPrimary,
+          // Time-based greeting with username
+          Container(
+            width: double.infinity,
+            child: Text(
+              _getGreetingWithUsername(context),
+              style: GoogleFonts.rajdhani(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: AppColors.textPrimary,
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
 

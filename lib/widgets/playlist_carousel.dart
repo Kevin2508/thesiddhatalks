@@ -5,6 +5,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../utils/app_colors.dart';
 import '../models/youtube_models.dart';
 import '../screens/player_screen.dart';
+import 'watchlist_button.dart';
 
 class YouTubePlaylistCarousel extends StatelessWidget {
   final PlaylistInfo playlist;
@@ -596,6 +597,14 @@ class YouTubeVideoListItem extends StatelessWidget {
                           color: Colors.white,
                           size: 20,
                         ),
+                      ),
+                    ),
+                    Positioned(
+                      top: 4,
+                      right: 4,
+                      child: WatchlistButton(
+                        video: video,
+                        size: 14,
                       ),
                     ),
                     Positioned(

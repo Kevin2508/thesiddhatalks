@@ -5,9 +5,11 @@ import 'package:shimmer/shimmer.dart';
 import '../utils/app_colors.dart';
 import '../widgets/hero_card.dart';
 import '../widgets/greeting_section.dart';
-import '../widgets/youtube_playlist_carousel.dart';
+import '../widgets/recently_played_section.dart';
+import '../widgets/collapsible_playlist_card.dart';
 import '../widgets/live_stream_banner.dart';
 import '../services/youtube_service.dart';
+import '../services/recently_played_service.dart';
 import '../models/youtube_models.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -27,6 +29,7 @@ class _HomeScreenState extends State<HomeScreen>
   List<PlaylistInfo> _displayedPlaylists = [];
   Map<String, List<YouTubeVideo>> _playlistVideos = {};
   List<LiveStream> _liveStreams = [];
+  String? _expandedPlaylistId;
   bool _isLoading = true;
   bool _isLoadingMore = false;
   bool _hasMore = false;
@@ -139,6 +142,25 @@ class _HomeScreenState extends State<HomeScreen>
     }
   }
 
+  void _togglePlaylist(String playlistId) {
+    setState(() {
+      if (_expandedPlaylistId == playlistId) {
+        _expandedPlaylistId = null;
+      } else {
+        _expandedPlaylistId = playlistId;
+      }
+    });
+  }
+
+  void _playVideo(YouTubeVideo video) {
+    RecentlyPlayedService.addRecentlyPlayedVideo(video);
+    Navigator.pushNamed(
+      context,
+      '/player',
+      arguments: video,
+    );
+  }
+
   // Check if there are any active live streams
   bool get _hasActiveLiveStream {
     return _liveStreams.any((stream) => stream.isLive);
@@ -243,6 +265,16 @@ class _HomeScreenState extends State<HomeScreen>
                     ),
                     onPressed: () {},
                   ),
+                  IconButton(
+                    icon: const Icon(
+                      Icons.account_circle_outlined,
+                      color: AppColors.textSecondary,
+                      size: 26,
+                    ),
+                    onPressed: () {
+                      Navigator.of(context).pushNamed('/profile');
+                    },
+                  ),
                 ],
               ),
 
@@ -261,23 +293,77 @@ class _HomeScreenState extends State<HomeScreen>
                           child: const GreetingSection(),
                         ),
 
+                        // Recently Played Section
+                        _buildAnimatedSection(
+                          interval: const Interval(0.1, 0.4, curve: Curves.easeOut),
+                          child: const RecentlyPlayedSection(),
+                        ),
+
                         // Live Stream Banner - ONLY show when there's an active live stream
                         if (_hasActiveLiveStream && !_isLoading && _currentLiveStream != null)
                           _buildAnimatedSection(
-                            interval: const Interval(0.1, 0.4, curve: Curves.easeOut),
+                            interval: const Interval(0.2, 0.5, curve: Curves.easeOut),
                             child: _buildLiveStreamSection(_currentLiveStream!),
                           ),
 
                         // Hero Card
                         _buildAnimatedSection(
-                          interval: const Interval(0.2, 0.5, curve: Curves.easeOut),
+                          interval: const Interval(0.3, 0.6, curve: Curves.easeOut),
                           child: const Padding(
                             padding: EdgeInsets.symmetric(horizontal: 20),
                             child: HeroCard(),
                           ),
                         ),
 
-                        const SizedBox(height: 24),
+                        const SizedBox(height: 10),
+
+                        // Playlists Section Header
+                        if (!_isLoading && _displayedPlaylists.isNotEmpty)
+                          _buildAnimatedSection(
+                            interval: const Interval(0.4, 0.7, curve: Curves.easeOut),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 20),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.playlist_play,
+                                    color: AppColors.primaryAccent,
+                                    size: 20,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'All Playlists',
+                                    style: GoogleFonts.rajdhani(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold,
+                                      color: AppColors.textPrimary,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.primaryAccent.withOpacity(0.1),
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(
+                                        color: AppColors.primaryAccent.withOpacity(0.3),
+                                      ),
+                                    ),
+                                    child: Text(
+                                      '${_allPlaylists.length}',
+                                      style: GoogleFonts.lato(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        color: AppColors.primaryAccent,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+
+                        const SizedBox(height: 16),
 
                         // Content based on loading state
                         if (_error != null)
@@ -287,7 +373,7 @@ class _HomeScreenState extends State<HomeScreen>
                         else if (_displayedPlaylists.isEmpty)
                             _buildEmptyStateWidget()
                           else
-                            ..._buildPlaylistSections(),
+                            ..._buildCollapsiblePlaylists(),
 
                         // Load more content
                         if (_isLoadingMore) _buildLoadMoreIndicator(),
@@ -307,6 +393,26 @@ class _HomeScreenState extends State<HomeScreen>
         ),
       ),
     );
+  }
+
+  List<Widget> _buildCollapsiblePlaylists() {
+    return _displayedPlaylists.map((playlist) {
+      final videos = _playlistVideos[playlist.id] ?? [];
+
+      return _buildAnimatedSection(
+        interval: const Interval(0.5, 0.8, curve: Curves.easeOut),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: CollapsiblePlaylistCard(
+            playlist: playlist,
+            videos: videos,
+            isExpanded: _expandedPlaylistId == playlist.id,
+            onToggle: () => _togglePlaylist(playlist.id),
+            onVideoTap: _playVideo,
+          ),
+        ),
+      );
+    }).toList();
   }
 
   Widget _buildLiveStreamSection(LiveStream liveStream) {
@@ -403,7 +509,7 @@ class _HomeScreenState extends State<HomeScreen>
             ),
             const SizedBox(height: 12),
             Text(
-              'Loading more content...',
+              'Loading more playlists...',
               style: GoogleFonts.lato(
                 fontSize: 14,
                 color: AppColors.textSecondary,
@@ -422,7 +528,7 @@ class _HomeScreenState extends State<HomeScreen>
         child: ElevatedButton.icon(
           onPressed: _loadMoreContent,
           icon: const Icon(Icons.expand_more),
-          label: Text('Load More (${_allPlaylists.length - _displayedPlaylists.length} remaining)'),
+          label: Text('Load More Playlists (${_allPlaylists.length - _displayedPlaylists.length} remaining)'),
           style: ElevatedButton.styleFrom(
             backgroundColor: AppColors.primaryAccent,
             foregroundColor: Colors.white,
@@ -440,91 +546,46 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Widget _buildSkeletonLoading() {
-    return Column(
-      children: List.generate(2, (index) => _buildPlaylistSkeleton()),
-    );
-  }
-
-  Widget _buildPlaylistSkeleton() {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 24),
+      padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildSkeletonContainer(
-                      width: 200,
-                      height: 24,
-                      borderRadius: 8,
-                    ),
-                    const SizedBox(height: 8),
-                    _buildSkeletonContainer(
-                      width: 120,
-                      height: 16,
-                      borderRadius: 6,
-                    ),
-                  ],
-                ),
-                _buildSkeletonContainer(
-                  width: 80,
-                  height: 32,
-                  borderRadius: 16,
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-          SizedBox(
-            height: 200,
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              itemCount: 3,
-              itemBuilder: (context, index) => _buildVideoCardSkeleton(),
-            ),
-          ),
-        ],
+        children: List.generate(3, (index) => _buildPlaylistCardSkeleton()),
       ),
     );
   }
 
-  Widget _buildVideoCardSkeleton() {
+  Widget _buildPlaylistCardSkeleton() {
     return Container(
-      width: 280,
-      margin: const EdgeInsets.only(right: 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.cardBackground,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
         children: [
-          _buildSkeletonContainer(
-            width: 280,
-            height: 120,
-            borderRadius: 12,
+          _buildSkeletonContainer(width: 80, height: 60, borderRadius: 8),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildSkeletonContainer(width: double.infinity, height: 18, borderRadius: 4),
+                const SizedBox(height: 8),
+                _buildSkeletonContainer(width: 120, height: 12, borderRadius: 4),
+                const SizedBox(height: 4),
+                _buildSkeletonContainer(width: 200, height: 10, borderRadius: 4),
+              ],
+            ),
           ),
-          const SizedBox(height: 12),
-          _buildSkeletonContainer(
-            width: 260,
-            height: 18,
-            borderRadius: 6,
-          ),
-          const SizedBox(height: 8),
-          _buildSkeletonContainer(
-            width: 200,
-            height: 14,
-            borderRadius: 4,
-          ),
-          const SizedBox(height: 6),
-          _buildSkeletonContainer(
-            width: 80,
-            height: 12,
-            borderRadius: 4,
-          ),
+          _buildSkeletonContainer(width: 24, height: 24, borderRadius: 12),
         ],
       ),
     );
@@ -548,36 +609,6 @@ class _HomeScreenState extends State<HomeScreen>
         ),
       ),
     );
-  }
-
-  List<Widget> _buildPlaylistSections() {
-    // Filter out playlists that have no videos
-    final playlistsWithVideos = _displayedPlaylists.where((playlist) {
-      final videos = _playlistVideos[playlist.id] ?? [];
-      return videos.isNotEmpty;
-    }).toList();
-
-    if (playlistsWithVideos.isEmpty) {
-      return [_buildEmptyStateWidget()];
-    }
-
-    return playlistsWithVideos.map((playlist) {
-      final videos = _playlistVideos[playlist.id] ?? [];
-
-      return _buildAnimatedSection(
-        interval: const Interval(0.4, 0.7, curve: Curves.easeOut),
-        child: Column(
-          children: [
-            YouTubePlaylistCarousel(
-              playlist: playlist,
-              videos: videos,
-              onSeeAll: () => _navigateToPlaylistView(playlist),
-            ),
-            const SizedBox(height: 24),
-          ],
-        ),
-      );
-    }).toList();
   }
 
   Widget _buildEmptyStateWidget() {
@@ -680,15 +711,6 @@ class _HomeScreenState extends State<HomeScreen>
     );
   }
 
-  void _navigateToPlaylistView(PlaylistInfo playlist) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => PlaylistVideosScreen(playlist: playlist),
-      ),
-    );
-  }
-
   Widget _buildAnimatedSection({
     required Interval interval,
     required Widget child,
@@ -720,190 +742,5 @@ class _HomeScreenState extends State<HomeScreen>
     _scrollController.dispose();
     _pageScrollController.dispose();
     super.dispose();
-  }
-}
-
-// Screen to show all videos in a playlist
-class PlaylistVideosScreen extends StatefulWidget {
-  final PlaylistInfo playlist;
-
-  const PlaylistVideosScreen({
-    Key? key,
-    required this.playlist,
-  }) : super(key: key);
-
-  @override
-  State<PlaylistVideosScreen> createState() => _PlaylistVideosScreenState();
-}
-
-class _PlaylistVideosScreenState extends State<PlaylistVideosScreen> {
-  final YouTubeService _youtubeService = YouTubeService();
-  List<YouTubeVideo> _videos = [];
-  bool _isLoading = true;
-  String? _error;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadAllVideos();
-  }
-
-  Future<void> _loadAllVideos() async {
-    try {
-      setState(() {
-        _isLoading = true;
-        _error = null;
-      });
-
-      final videos = await _youtubeService.getPlaylistVideos(
-        widget.playlist.id,
-        maxResults: 50,
-      );
-
-      setState(() {
-        _videos = videos;
-        _isLoading = false;
-      });
-    } catch (e) {
-      setState(() {
-        _error = e.toString();
-        _isLoading = false;
-      });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.primaryBackground,
-      appBar: AppBar(
-        title: Text(
-          widget.playlist.title,
-          style: GoogleFonts.rajdhani(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-            color: AppColors.textPrimary,
-          ),
-        ),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(
-            Icons.arrow_back_ios,
-            color: AppColors.textPrimary,
-          ),
-          onPressed: () => Navigator.pop(context),
-        ),
-      ),
-      body: _isLoading
-          ? _buildPlaylistDetailSkeleton()
-          : _error != null
-          ? Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text('Error: $_error'),
-            ElevatedButton(
-              onPressed: _loadAllVideos,
-              child: Text('Retry'),
-            ),
-          ],
-        ),
-      )
-          : ListView.builder(
-        padding: const EdgeInsets.all(20),
-        itemCount: _videos.length,
-        itemBuilder: (context, index) {
-          return YouTubeVideoListItem(
-            video: _videos[index],
-            onTap: () => _playVideo(_videos[index]),
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _buildPlaylistDetailSkeleton() {
-    return ListView.builder(
-      padding: const EdgeInsets.all(20),
-      itemCount: 6,
-      itemBuilder: (context, index) => _buildVideoListItemSkeleton(),
-    );
-  }
-
-  Widget _buildVideoListItemSkeleton() {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Shimmer.fromColors(
-            baseColor: AppColors.textSecondary.withOpacity(0.1),
-            highlightColor: AppColors.textSecondary.withOpacity(0.2),
-            child: Container(
-              width: 120,
-              height: 80,
-              decoration: BoxDecoration(
-                color: AppColors.textSecondary.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Shimmer.fromColors(
-                  baseColor: AppColors.textSecondary.withOpacity(0.1),
-                  highlightColor: AppColors.textSecondary.withOpacity(0.2),
-                  child: Container(
-                    height: 18,
-                    decoration: BoxDecoration(
-                      color: AppColors.textSecondary.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Shimmer.fromColors(
-                  baseColor: AppColors.textSecondary.withOpacity(0.1),
-                  highlightColor: AppColors.textSecondary.withOpacity(0.2),
-                  child: Container(
-                    height: 14,
-                    width: double.infinity * 0.7,
-                    decoration: BoxDecoration(
-                      color: AppColors.textSecondary.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Shimmer.fromColors(
-                  baseColor: AppColors.textSecondary.withOpacity(0.1),
-                  highlightColor: AppColors.textSecondary.withOpacity(0.2),
-                  child: Container(
-                    height: 12,
-                    width: 80,
-                    decoration: BoxDecoration(
-                      color: AppColors.textSecondary.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _playVideo(YouTubeVideo video) {
-    Navigator.pushNamed(
-      context,
-      '/player',
-      arguments: video,
-    );
   }
 }

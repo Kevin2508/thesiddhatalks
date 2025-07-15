@@ -344,6 +344,22 @@ class LiveStream {
       return number.toString();
     }
   }
+
+  // Convert LiveStream to YouTubeVideo for watchlist functionality
+  YouTubeVideo toYouTubeVideo() {
+    return YouTubeVideo(
+      id: id,
+      title: title,
+      description: description,
+      thumbnailUrl: thumbnailUrl,
+      channelTitle: channelTitle,
+      publishedAt: publishedAt,
+      duration: isLive ? 'LIVE' : 'Unknown',
+      viewCount: viewCount,
+      likeCount: likeCount,
+      isNew: false,
+    );
+  }
 }
 
 // Category mapping for your app

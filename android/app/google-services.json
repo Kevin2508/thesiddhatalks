@@ -1,0 +1,54 @@
+{
+  "project_info": {
+    "project_number": "445614384075",
+    "project_id": "siddha-kutumbakam-7c05d",
+    "storage_bucket": "siddha-kutumbakam-7c05d.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:445614384075:android:cad864b1d1cad8503dcc4e",
+        "android_client_info": {
+          "package_name": "com.example.thesiddhatalks"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "445614384075-5r1c9uevhdv0m7qeo8ci3bch3otm50me.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.thesiddhatalks",
+            "certificate_hash": "277ddadeeb9e7ed9b32bbcc51c1f4009cbf03a0d"
+          }
+        },
+        {
+          "client_id": "445614384075-loq7rpghohsvhop1nal36s4jbc9pt1in.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCclNhZABAe2Rm20GtXFzvCzl313VUtqRI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "445614384075-loq7rpghohsvhop1nal36s4jbc9pt1in.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "445614384075-ucgv8eu5ejmoe4orivhc9lbu76cltfed.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.thesiddhatalks"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
