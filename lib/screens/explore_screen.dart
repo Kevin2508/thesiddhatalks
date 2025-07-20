@@ -5,7 +5,8 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:shimmer/shimmer.dart';
 import '../utils/app_colors.dart';
 import '../models/youtube_models.dart';
-import '../services/youtube_service.dart';
+import '../services/optimized_youtube_service.dart';
+import '../services/app_initialization_service.dart';
 import 'player_screen.dart';
 
 class ExploreScreen extends StatefulWidget {
@@ -18,13 +19,17 @@ class ExploreScreen extends StatefulWidget {
 class _ExploreScreenState extends State<ExploreScreen>
     with TickerProviderStateMixin {
   final TextEditingController _searchController = TextEditingController();
-  final YouTubeService _youtubeService = YouTubeService();
+  final OptimizedYouTubeService _youtubeService = OptimizedYouTubeService();
   late AnimationController _fadeController;
+
+  // Session-level cache to prevent repeated loading
+  static List<String>? _sessionCategories;
+  static List<YouTubeVideo>? _sessionAllVideos;
+  static Map<String, List<YouTubeVideo>>? _sessionCategorizedVideos;
 
   String _selectedCategory = 'All';
   List<YouTubeVideo> _allVideos = [];
   List<YouTubeVideo> _filteredVideos = [];
-  List<PlaylistInfo> _playlists = [];
   Map<String, List<YouTubeVideo>> _categorizedVideos = {};
   List<String> _categories = ['All'];
 
@@ -40,7 +45,7 @@ class _ExploreScreenState extends State<ExploreScreen>
       vsync: this,
     );
 
-    _loadData();
+    _checkInitializationAndLoad();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
@@ -49,6 +54,76 @@ class _ExploreScreenState extends State<ExploreScreen>
     });
   }
 
+  void _checkInitializationAndLoad() async {
+    // Check if app is initialized in current session
+    if (AppInitializationService.isSessionInitialized) {
+      print('✅ Session already initialized');
+      
+      // Check if we have session-cached data
+      if (_sessionCategories != null && 
+          _sessionAllVideos != null && 
+          _sessionCategorizedVideos != null) {
+        print('📱 Using session-cached explore data (no Firebase calls)');
+        setState(() {
+          _categories = List.from(_sessionCategories!);
+          _allVideos = List.from(_sessionAllVideos!);
+          _filteredVideos = List.from(_sessionAllVideos!);
+          _categorizedVideos = Map.from(_sessionCategorizedVideos!);
+          _isLoading = false;
+        });
+      } else {
+        print('🔥 Loading explore data from Firebase and caching to session');
+        await _loadDataFromCacheAndStore();
+      }
+    } else {
+      print('⚠️ Session not initialized, redirecting to sync screen');
+      Navigator.of(context).pushReplacementNamed('/initial-sync');
+    }
+  }
+
+  /// Load data from Firebase cache and store in session cache (only called once per session)
+  Future<void> _loadDataFromCacheAndStore() async {
+    try {
+      setState(() {
+        _isLoading = true;
+        _error = null;
+      });
+
+      print('🔍 Loading explore page data from Firebase cache (one-time per session)...');
+      final stopwatch = Stopwatch()..start();
+
+      // Use optimized loading method
+      final result = await _youtubeService.loadExplorePageData();
+
+      // Store in session cache
+      _sessionCategories = result['categories'] as List<String>;
+      _sessionAllVideos = result['allVideos'] as List<YouTubeVideo>;
+
+      setState(() {
+        _categories = List.from(_sessionCategories!);
+        _allVideos = List.from(_sessionAllVideos!);
+        _filteredVideos = List.from(_sessionAllVideos!);
+        _isLoading = false;
+      });
+
+      // Categorize videos and store in session cache
+      _categorizeVideos();
+      _sessionCategorizedVideos = Map.from(_categorizedVideos);
+
+      stopwatch.stop();
+      print('✅ Explore page loaded and cached in ${stopwatch.elapsedMilliseconds}ms');
+      print('📊 Cached ${_categories.length} categories with ${_allVideos.length} videos');
+
+    } catch (e) {
+      print('❌ Error loading explore data from Firebase cache: $e');
+      setState(() {
+        _error = e.toString();
+        _isLoading = false;
+      });
+    }
+  }
+
+  /// Load data with initialization checks (used for manual refresh)
   Future<void> _loadData() async {
     try {
       setState(() {
@@ -56,31 +131,44 @@ class _ExploreScreenState extends State<ExploreScreen>
         _error = null;
       });
 
-      print('🔍 Starting optimized explore page load...');
+      print('🔍 Manual refresh - loading explore page data...');
       final stopwatch = Stopwatch()..start();
 
       // Use optimized loading method
       final result = await _youtubeService.loadExplorePageData();
 
       setState(() {
-        _playlists = result['playlists'] as List<PlaylistInfo>;
         _categories = result['categories'] as List<String>;
         _allVideos = result['allVideos'] as List<YouTubeVideo>;
-        _categorizedVideos = result['categorizedVideos'] as Map<String, List<YouTubeVideo>>;
         _filteredVideos = result['allVideos'] as List<YouTubeVideo>;
         _isLoading = false;
       });
 
+      // Categorize videos
+      _categorizeVideos();
+
       stopwatch.stop();
-      print('✅ Explore page loaded in ${stopwatch.elapsedMilliseconds}ms');
+      print('✅ Explore page refreshed in ${stopwatch.elapsedMilliseconds}ms (from cache)');
       print('📊 Loaded ${_categories.length} categories with ${_allVideos.length} videos');
 
     } catch (e) {
-      print('❌ Error in _loadData: $e');
+      print('❌ Error in manual refresh: $e');
       setState(() {
         _error = e.toString();
         _isLoading = false;
       });
+    }
+  }
+
+  void _categorizeVideos() {
+    _categorizedVideos.clear();
+    
+    for (final video in _allVideos) {
+      final category = VideoCategory.categorizeVideo(video.title, video.description);
+      if (!_categorizedVideos.containsKey(category)) {
+        _categorizedVideos[category] = [];
+      }
+      _categorizedVideos[category]!.add(video);
     }
   }
 
@@ -97,7 +185,7 @@ class _ExploreScreenState extends State<ExploreScreen>
     try {
       final searchResults = await _youtubeService.searchChannelVideos(
         query,
-        maxResults: 30,
+        limit: 30,
       );
 
       setState(() {
@@ -138,24 +226,33 @@ class _ExploreScreenState extends State<ExploreScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.primaryBackground,
+      resizeToAvoidBottomInset: true, // Handle keyboard properly
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: () async {
-            await _youtubeService.clearCache();
+            await _youtubeService.forceRefresh();
             await _loadData();
           },
-          child: Column(
-            children: [
+          child: CustomScrollView(
+            slivers: [
               // Header
-              _buildHeader(),
+              SliverToBoxAdapter(
+                child: _buildHeader(),
+              ),
 
               // Category Filter
-              if (!_isLoading) _buildCategoryFilter(),
+              if (!_isLoading)
+                SliverToBoxAdapter(
+                  child: _buildCategoryFilter(),
+                ),
 
-              const SizedBox(height: 20),
+              SliverToBoxAdapter(
+                child: const SizedBox(height: 20),
+              ),
 
               // Content
-              Expanded(
+              SliverFillRemaining(
+                hasScrollBody: false,
                 child: _buildContent(),
               ),
             ],
@@ -537,50 +634,60 @@ class _ExploreScreenState extends State<ExploreScreen>
   }
 
   Widget _buildEmptyState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.search_off,
-            size: 64,
-            color: AppColors.textSecondary.withOpacity(0.5),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'No videos found',
-            style: GoogleFonts.rajdhani(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: AppColors.textSecondary,
+    return SingleChildScrollView(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          minHeight: MediaQuery.of(context).size.height * 0.4,
+        ),
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.search_off,
+                  size: 64,
+                  color: AppColors.textSecondary.withOpacity(0.5),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'No videos found',
+                  style: GoogleFonts.rajdhani(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Try adjusting your search terms\nor exploring different categories',
+                  style: GoogleFonts.lato(
+                    fontSize: 16,
+                    color: AppColors.textSecondary,
+                    height: 1.4,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 24),
+                ElevatedButton(
+                  onPressed: () {
+                    _searchController.clear();
+                    setState(() {
+                      _selectedCategory = 'All';
+                    });
+                    _filterContent('');
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primaryAccent,
+                    foregroundColor: Colors.white,
+                  ),
+                  child: Text('Show All Videos'),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 8),
-          Text(
-            'Try adjusting your search terms\nor exploring different categories',
-            style: GoogleFonts.lato(
-              fontSize: 16,
-              color: AppColors.textSecondary,
-              height: 1.4,
-            ),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 24),
-          ElevatedButton(
-            onPressed: () {
-              _searchController.clear();
-              setState(() {
-                _selectedCategory = 'All';
-              });
-              _filterContent('');
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primaryAccent,
-              foregroundColor: Colors.white,
-            ),
-            child: Text('Show All Videos'),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -618,7 +725,7 @@ class _ExploreScreenState extends State<ExploreScreen>
             const SizedBox(height: 24),
             ElevatedButton(
               onPressed: () async {
-                await _youtubeService.clearCache();
+                await _youtubeService.forceRefresh();
                 await _loadData();
               },
               style: ElevatedButton.styleFrom(

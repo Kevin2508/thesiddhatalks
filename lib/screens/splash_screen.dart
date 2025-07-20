@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../utils/app_colors.dart';
 import '../providers/auth_provider.dart';
 import '../services/auth_service.dart';
+import '../services/app_initialization_service.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({Key? key}) : super(key: key);
@@ -57,11 +58,30 @@ class _SplashScreenState extends State<SplashScreen>
     _fadeController.forward();
     _scaleController.forward();
 
+    // Initialize app data in background
+    _initializeAppData();
+
     // Wait for minimum splash duration
     await Future.delayed(const Duration(milliseconds: 3000));
     
     if (mounted) {
       _checkAuthAndNavigate();
+    }
+  }
+
+  void _initializeAppData() async {
+    try {
+      print('🚀 Starting app data initialization...');
+      final success = await AppInitializationService.initializeAppIfNeeded();
+      
+      if (success) {
+        print('✅ App data initialization completed');
+      } else {
+        print('❌ App data initialization failed - will show sync screen');
+      }
+    } catch (e) {
+      print('❌ App data initialization failed: $e');
+      // Continue anyway - user can manually refresh later
     }
   }
 

@@ -53,8 +53,32 @@ class _PlayerScreenState extends State<PlayerScreen>
         enableCaption: true,
         captionLanguage: 'en',
         startAt: 0,
+        forceHD: false,
+        controlsVisibleAtStart: true,
+        hideControls: false,
+        hideThumbnail: false,
+        disableDragSeek: false,
+        useHybridComposition: true,
       ),
     );
+    
+    // Add listener for fullscreen changes
+    _youtubeController.addListener(() {
+      if (_youtubeController.value.isFullScreen != _isFullScreen) {
+        setState(() {
+          _isFullScreen = _youtubeController.value.isFullScreen;
+        });
+        
+        if (_isFullScreen) {
+          SystemChrome.setPreferredOrientations([
+            DeviceOrientation.landscapeLeft,
+            DeviceOrientation.landscapeRight,
+          ]);
+        } else {
+          SystemChrome.setPreferredOrientations(DeviceOrientation.values);
+        }
+      }
+    });
   }
 
   Future<void> _loadRelatedContent() async {
@@ -91,39 +115,38 @@ class _PlayerScreenState extends State<PlayerScreen>
     }
 
     return YoutubePlayerBuilder(
+      onEnterFullScreen: () {
+        setState(() {
+          _isFullScreen = true;
+        });
+        SystemChrome.setPreferredOrientations([
+          DeviceOrientation.landscapeLeft,
+          DeviceOrientation.landscapeRight,
+        ]);
+        // Hide system UI for true fullscreen experience
+        SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersive);
+      },
       onExitFullScreen: () {
         setState(() {
           _isFullScreen = false;
         });
         SystemChrome.setPreferredOrientations(DeviceOrientation.values);
+        // Restore system UI
+        SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
       },
       player: YoutubePlayer(
         controller: _youtubeController,
         showVideoProgressIndicator: true,
         progressIndicatorColor: AppColors.primaryAccent,
-        topActions: <Widget>[
-          const SizedBox(width: 8.0),
-          Expanded(
-            child: Text(
-              widget.video!.title,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 18.0,
-              ),
-              overflow: TextOverflow.ellipsis,
-              maxLines: 1,
-            ),
-          ),
-          IconButton(
-            icon: const Icon(
-              Icons.settings,
-              color: Colors.white,
-              size: 25.0,
-            ),
-            onPressed: () {
-              // Settings can be handled by the player itself
-            },
-          ),
+        progressColors: ProgressBarColors(
+          playedColor: AppColors.primaryAccent,
+          handleColor: AppColors.primaryAccent,
+        ),
+        bottomActions: [
+          CurrentPosition(),
+          ProgressBar(isExpanded: true),
+          RemainingDuration(),
+          FullScreenButton(),
         ],
         onReady: () {
           setState(() {
@@ -135,21 +158,33 @@ class _PlayerScreenState extends State<PlayerScreen>
           _showVideoCompleted();
         },
       ),
-      builder: (context, player) => Scaffold(
-        backgroundColor: AppColors.primaryBackground,
-        body: SafeArea(
-          child: Column(
-            children: [
-              // Custom App Bar (hidden in fullscreen)
-              if (!_isFullScreen) _buildAppBar(),
+      builder: (context, player) => WillPopScope(
+        onWillPop: () async {
+          // Handle back button press
+          if (_isFullScreen) {
+            _youtubeController.toggleFullScreenMode();
+            return false; // Don't exit the screen
+          }
+          return true; // Allow normal back navigation
+        },
+        child: Scaffold(
+          backgroundColor: AppColors.primaryBackground,
+          body: _isFullScreen 
+            ? player  // Show only player in fullscreen
+            : SafeArea(
+                child: Column(
+                  children: [
+                    // Custom App Bar (hidden in fullscreen)
+                    _buildAppBar(),
 
-              // Video Player
-              player,
+                    // Video Player
+                    player,
 
-              // Content below player
-              if (!_isFullScreen) _buildContentSection(),
-            ],
-          ),
+                    // Content below player
+                    _buildContentSection(),
+                  ],
+                ),
+              ),
         ),
       ),
     );
@@ -202,6 +237,13 @@ class _PlayerScreenState extends State<PlayerScreen>
             onPressed: _shareVideo,
             icon: const Icon(
               Icons.share_outlined,
+              color: AppColors.textSecondary,
+            ),
+          ),
+          IconButton(
+            onPressed: _toggleFullScreen,
+            icon: const Icon(
+              Icons.fullscreen,
               color: AppColors.textSecondary,
             ),
           ),
@@ -567,6 +609,10 @@ class _PlayerScreenState extends State<PlayerScreen>
     );
   }
 
+  void _toggleFullScreen() {
+    _youtubeController.toggleFullScreenMode();
+  }
+
   void _openInYouTube() async {
     final url = 'https://youtu.be/${widget.video!.id}';
     if (await canLaunchUrl(Uri.parse(url))) {
@@ -663,6 +709,9 @@ class _PlayerScreenState extends State<PlayerScreen>
   void dispose() {
     _youtubeController.dispose();
     _tabController.dispose();
+    // Reset orientation and system UI when leaving the screen
+    SystemChrome.setPreferredOrientations(DeviceOrientation.values);
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     super.dispose();
   }
 }

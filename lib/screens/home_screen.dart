@@ -8,7 +8,8 @@ import '../widgets/greeting_section.dart';
 import '../widgets/recently_played_section.dart';
 import '../widgets/collapsible_playlist_card.dart';
 import '../widgets/live_stream_banner.dart';
-import '../services/youtube_service.dart';
+import '../services/optimized_youtube_service.dart';
+import '../services/app_initialization_service.dart';
 import '../services/recently_played_service.dart';
 import '../models/youtube_models.dart';
 
@@ -23,7 +24,14 @@ class _HomeScreenState extends State<HomeScreen>
     with TickerProviderStateMixin {
   late AnimationController _scrollController;
   final ScrollController _pageScrollController = ScrollController();
-  final YouTubeService _youtubeService = YouTubeService();
+  final OptimizedYouTubeService _youtubeService = OptimizedYouTubeService();
+
+  // Session-level cache to prevent repeated loading
+  static List<PlaylistInfo>? _sessionAllPlaylists;
+  static List<PlaylistInfo>? _sessionDisplayedPlaylists;
+  static Map<String, List<YouTubeVideo>>? _sessionPlaylistVideos;
+  static List<LiveStream>? _sessionLiveStreams;
+  static bool? _sessionHasMore;
 
   List<PlaylistInfo> _allPlaylists = [];
   List<PlaylistInfo> _displayedPlaylists = [];
@@ -43,14 +51,44 @@ class _HomeScreenState extends State<HomeScreen>
       vsync: this,
     );
 
-    _loadData();
     _setupScrollListener();
+    _checkInitializationAndLoad();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         _scrollController.forward();
       }
     });
+  }
+
+  void _checkInitializationAndLoad() async {
+    // Check if app is initialized in current session
+    if (AppInitializationService.isSessionInitialized) {
+      print('✅ Session already initialized');
+      
+      // Check if we have session-cached data
+      if (_sessionAllPlaylists != null && 
+          _sessionDisplayedPlaylists != null && 
+          _sessionPlaylistVideos != null && 
+          _sessionLiveStreams != null &&
+          _sessionHasMore != null) {
+        print('📱 Using session-cached data (no Firebase calls)');
+        setState(() {
+          _allPlaylists = List.from(_sessionAllPlaylists!);
+          _displayedPlaylists = List.from(_sessionDisplayedPlaylists!);
+          _playlistVideos = Map.from(_sessionPlaylistVideos!);
+          _liveStreams = List.from(_sessionLiveStreams!);
+          _hasMore = _sessionHasMore!;
+          _isLoading = false;
+        });
+      } else {
+        print('🔥 Loading from Firebase and caching to session');
+        await _loadDataFromCacheAndStore();
+      }
+    } else {
+      print('⚠️ Session not initialized, redirecting to sync screen');
+      Navigator.of(context).pushReplacementNamed('/initial-sync');
+    }
   }
 
   void _setupScrollListener() {
@@ -62,6 +100,50 @@ class _HomeScreenState extends State<HomeScreen>
     });
   }
 
+  /// Load data from Firebase cache and store in session cache (only called once per session)
+  Future<void> _loadDataFromCacheAndStore() async {
+    try {
+      setState(() {
+        _isLoading = true;
+        _error = null;
+      });
+
+      print('🏠 Loading home page data from Firebase cache (one-time per session)...');
+      final stopwatch = Stopwatch()..start();
+
+      final result = await _youtubeService.loadHomePageData();
+
+      // Store in session cache
+      _sessionAllPlaylists = result['playlists'] as List<PlaylistInfo>;
+      _sessionDisplayedPlaylists = result['initialPlaylists'] as List<PlaylistInfo>;
+      _sessionPlaylistVideos = result['playlistVideos'] as Map<String, List<YouTubeVideo>>;
+      _sessionLiveStreams = result['liveStreams'] as List<LiveStream>;
+      _sessionHasMore = result['hasMore'] as bool;
+
+      setState(() {
+        _allPlaylists = List.from(_sessionAllPlaylists!);
+        _displayedPlaylists = List.from(_sessionDisplayedPlaylists!);
+        _playlistVideos = Map.from(_sessionPlaylistVideos!);
+        _liveStreams = List.from(_sessionLiveStreams!);
+        _hasMore = _sessionHasMore!;
+        _isLoading = false;
+      });
+
+      stopwatch.stop();
+      print('✅ Home page loaded and cached in ${stopwatch.elapsedMilliseconds}ms');
+      print('📊 Cached ${_displayedPlaylists.length}/${_allPlaylists.length} playlists');
+      print('🔴 Found ${_liveStreams.length} live streams');
+
+    } catch (e) {
+      print('❌ Error loading from Firebase cache: $e');
+      setState(() {
+        _error = e.toString();
+        _isLoading = false;
+      });
+    }
+  }
+
+  /// Load data with initialization checks (used for manual refresh)
   Future<void> _loadData() async {
     try {
       setState(() {
@@ -69,22 +151,30 @@ class _HomeScreenState extends State<HomeScreen>
         _error = null;
       });
 
-      print('🏠 Starting optimized home page load...');
+      print('🏠 Manual refresh - loading home page data...');
       final stopwatch = Stopwatch()..start();
 
       final result = await _youtubeService.loadHomePageData();
 
+      // Update session cache with fresh data
+      _sessionAllPlaylists = result['playlists'] as List<PlaylistInfo>;
+      _sessionDisplayedPlaylists = result['initialPlaylists'] as List<PlaylistInfo>;
+      _sessionPlaylistVideos = result['playlistVideos'] as Map<String, List<YouTubeVideo>>;
+      _sessionLiveStreams = result['liveStreams'] as List<LiveStream>;
+      _sessionHasMore = result['hasMore'] as bool;
+
       setState(() {
-        _allPlaylists = result['playlists'] as List<PlaylistInfo>;
-        _displayedPlaylists = result['initialPlaylists'] as List<PlaylistInfo>;
-        _playlistVideos = result['playlistVideos'] as Map<String, List<YouTubeVideo>>;
-        _liveStreams = result['liveStreams'] as List<LiveStream>;
-        _hasMore = result['hasMore'] as bool;
+        _allPlaylists = List.from(_sessionAllPlaylists!);
+        _displayedPlaylists = List.from(_sessionDisplayedPlaylists!);
+        _playlistVideos = Map.from(_sessionPlaylistVideos!);
+        _liveStreams = List.from(_sessionLiveStreams!);
+        _hasMore = _sessionHasMore!;
         _isLoading = false;
       });
 
       stopwatch.stop();
-      print('✅ Home page loaded in ${stopwatch.elapsedMilliseconds}ms');
+      final fromCache = result['fromCache'] as bool? ?? true;
+      print('✅ Home page refreshed in ${stopwatch.elapsedMilliseconds}ms (${fromCache ? "from cache" : "from API"})');
       print('📊 Loaded ${_displayedPlaylists.length}/${_allPlaylists.length} playlists');
       print('🔴 Found ${_liveStreams.length} live streams');
 
@@ -96,7 +186,7 @@ class _HomeScreenState extends State<HomeScreen>
       }
 
     } catch (e) {
-      print('❌ Error in _loadData: $e');
+      print('❌ Error in manual refresh: $e');
       setState(() {
         _error = e.toString();
         _isLoading = false;
@@ -126,6 +216,11 @@ class _HomeScreenState extends State<HomeScreen>
 
       final playlistIds = remainingPlaylists.map((p) => p.id).toList();
       final moreVideos = await _youtubeService.batchLoadPlaylistVideos(playlistIds, maxResults: 3);
+
+      // Update session cache
+      _sessionDisplayedPlaylists = [..._displayedPlaylists, ...remainingPlaylists];
+      _sessionPlaylistVideos = {..._playlistVideos, ...moreVideos};
+      _sessionHasMore = _sessionDisplayedPlaylists!.length < _allPlaylists.length;
 
       setState(() {
         _displayedPlaylists.addAll(remainingPlaylists);
@@ -182,8 +277,8 @@ class _HomeScreenState extends State<HomeScreen>
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: () async {
-            await _youtubeService.clearCache();
-            await _youtubeService.clearLiveStreamCache();
+            clearSessionCache(); // Clear session cache for fresh data
+            await _youtubeService.forceRefresh();
             await _loadData();
           },
           child: CustomScrollView(
@@ -396,7 +491,9 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   List<Widget> _buildCollapsiblePlaylists() {
-    return _displayedPlaylists.map((playlist) {
+    return _displayedPlaylists.asMap().entries.map((entry) {
+      final index = entry.key;
+      final playlist = entry.value;
       final videos = _playlistVideos[playlist.id] ?? [];
 
       return _buildAnimatedSection(
@@ -409,6 +506,7 @@ class _HomeScreenState extends State<HomeScreen>
             isExpanded: _expandedPlaylistId == playlist.id,
             onToggle: () => _togglePlaylist(playlist.id),
             onVideoTap: _playVideo,
+            index: index, // Pass the index for alternating colors
           ),
         ),
       );
@@ -735,6 +833,16 @@ class _HomeScreenState extends State<HomeScreen>
         );
       },
     );
+  }
+
+  /// Clear session cache (called when user manually refreshes)
+  static void clearSessionCache() {
+    _sessionAllPlaylists = null;
+    _sessionDisplayedPlaylists = null;
+    _sessionPlaylistVideos = null;
+    _sessionLiveStreams = null;
+    _sessionHasMore = null;
+    print('🗑️ Session cache cleared');
   }
 
   @override

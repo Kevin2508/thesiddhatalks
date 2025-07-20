@@ -11,6 +11,7 @@ class CollapsiblePlaylistCard extends StatefulWidget {
   final bool isExpanded;
   final VoidCallback onToggle;
   final Function(YouTubeVideo) onVideoTap;
+  final int index; // Add index parameter for alternating colors
 
   const CollapsiblePlaylistCard({
     Key? key,
@@ -19,6 +20,7 @@ class CollapsiblePlaylistCard extends StatefulWidget {
     required this.isExpanded,
     required this.onToggle,
     required this.onVideoTap,
+    required this.index, // Add required index
   }) : super(key: key);
 
   @override
@@ -30,6 +32,17 @@ class _CollapsiblePlaylistCardState extends State<CollapsiblePlaylistCard>
   late AnimationController _animationController;
   late Animation<double> _expandAnimation;
   late Animation<double> _iconAnimation;
+  
+  // Use colors from AppColors class - deep orange and lighter orange shades
+  static const List<Color> playlistColors = [
+    AppColors.primaryAccent,   // Deep saffron orange (#E65100)
+    AppColors.secondaryAccent, // Lighter warm amber orange (#FF8F00)
+  ];
+  
+  Color get playlistColor {
+    // Perfect alternating pattern: even index = orange, odd index = grey
+    return playlistColors[widget.index % playlistColors.length];
+  }
 
   @override
   void initState() {
@@ -66,14 +79,28 @@ class _CollapsiblePlaylistCardState extends State<CollapsiblePlaylistCard>
 
   @override
   Widget build(BuildContext context) {
+    final primaryColor = playlistColor;
+    final secondaryColor = playlistColor.withOpacity(0.7);
+    
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
-        color: AppColors.cardBackground,
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            primaryColor.withOpacity(0.1),
+            secondaryColor.withOpacity(0.05),
+          ],
+        ),
         borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: primaryColor.withOpacity(0.3),
+          width: 1,
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
+            color: primaryColor.withOpacity(0.1),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -90,39 +117,47 @@ class _CollapsiblePlaylistCardState extends State<CollapsiblePlaylistCard>
                 widget.onToggle();
               },
               borderRadius: BorderRadius.circular(16),
-              child: Padding(
+              child: Container(
                 padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      primaryColor.withOpacity(0.15),
+                      secondaryColor.withOpacity(0.08),
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(16),
+                ),
                 child: Row(
                   children: [
-                    // Playlist Thumbnail
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: SizedBox(
-                        width: 80,
-                        height: 60,
-                        child: widget.videos.isNotEmpty
-                            ? Image.network(
-                          widget.videos.first.thumbnailUrl,
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) {
-                            return Container(
-                              color: AppColors.textSecondary.withOpacity(0.1),
-                              child: Icon(
-                                Icons.playlist_play,
-                                color: AppColors.textSecondary,
-                                size: 24,
-                              ),
-                            );
-                          },
-                        )
-                            : Container(
-                          color: AppColors.textSecondary.withOpacity(0.1),
-                          child: Icon(
-                            Icons.playlist_play,
-                            color: AppColors.textSecondary,
-                            size: 24,
-                          ),
+                    // Colorful playlist icon
+                    Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            primaryColor,
+                            secondaryColor,
+                          ],
                         ),
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: [
+                          BoxShadow(
+                            color: primaryColor.withOpacity(0.3),
+                            blurRadius: 4,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: Icon(
+                        Icons.playlist_play,
+                        color: Colors.white,
+                        size: 24,
                       ),
                     ),
                     const SizedBox(width: 16),
@@ -147,14 +182,15 @@ class _CollapsiblePlaylistCardState extends State<CollapsiblePlaylistCard>
                               Icon(
                                 Icons.play_circle_outline,
                                 size: 16,
-                                color: AppColors.textSecondary,
+                                color: primaryColor,
                               ),
                               const SizedBox(width: 4),
                               Text(
                                 '${widget.videos.length} videos',
                                 style: GoogleFonts.lato(
                                   fontSize: 12,
-                                  color: AppColors.textSecondary,
+                                  color: primaryColor,
+                                  fontWeight: FontWeight.w600,
                                 ),
                               ),
                             ],
@@ -178,12 +214,19 @@ class _CollapsiblePlaylistCardState extends State<CollapsiblePlaylistCard>
                     AnimatedBuilder(
                       animation: _iconAnimation,
                       builder: (context, child) {
-                        return Transform.rotate(
-                          angle: _iconAnimation.value * 3.14159,
-                          child: Icon(
-                            Icons.keyboard_arrow_down,
-                            color: AppColors.primaryAccent,
-                            size: 24,
+                        return Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: primaryColor.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Transform.rotate(
+                            angle: _iconAnimation.value * 3.14159,
+                            child: Icon(
+                              Icons.keyboard_arrow_down,
+                              color: primaryColor,
+                              size: 20,
+                            ),
                           ),
                         );
                       },
@@ -214,11 +257,13 @@ class _CollapsiblePlaylistCardState extends State<CollapsiblePlaylistCard>
   }
 
   Widget _buildVideosList() {
+    final primaryColor = playlistColor;
+    
     return Container(
       decoration: BoxDecoration(
         border: Border(
           top: BorderSide(
-            color: AppColors.textSecondary.withOpacity(0.1),
+            color: primaryColor.withOpacity(0.2),
             width: 1,
           ),
         ),
@@ -237,15 +282,24 @@ class _CollapsiblePlaylistCardState extends State<CollapsiblePlaylistCard>
   }
 
   Widget _buildVideoItem(YouTubeVideo video) {
+    final primaryColor = playlistColor;
+    
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppColors.surfaceBackground.withOpacity(0.5),
+        color: Colors.white.withOpacity(0.5),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: AppColors.primaryAccent.withOpacity(0.1),
+          color: primaryColor.withOpacity(0.2),
         ),
+        boxShadow: [
+          BoxShadow(
+            color: primaryColor.withOpacity(0.05),
+            blurRadius: 4,
+            offset: const Offset(0, 1),
+          ),
+        ],
       ),
       child: InkWell(
         onTap: () => widget.onVideoTap(video),
@@ -296,19 +350,19 @@ class _CollapsiblePlaylistCardState extends State<CollapsiblePlaylistCard>
                   const SizedBox(height: 4),
                   Row(
                     children: [
-                      if (video.duration != null && video.duration!.isNotEmpty)
+                      if (video.duration.isNotEmpty)
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
-                            color: AppColors.primaryAccent.withOpacity(0.1),
+                            color: primaryColor.withOpacity(0.1),
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
-                            video.duration.toString(), // Convert to string safely
+                            video.duration,
                             style: GoogleFonts.lato(
                               fontSize: 10,
                               fontWeight: FontWeight.w500,
-                              color: AppColors.primaryAccent,
+                              color: primaryColor,
                             ),
                           ),
                         ),
@@ -327,21 +381,10 @@ class _CollapsiblePlaylistCardState extends State<CollapsiblePlaylistCard>
                 ],
               ),
             ),
-            // Action buttons
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                WatchlistButton(
-                  video: video,
-                  size: 20,
-                ),
-                const SizedBox(width: 8),
-                Icon(
-                  Icons.play_circle_outline,
-                  color: AppColors.primaryAccent,
-                  size: 24,
-                ),
-              ],
+            // Action button - only save/watchlist button
+            WatchlistButton(
+              video: video,
+              size: 20,
             ),
           ],
         ),
@@ -360,22 +403,24 @@ class _CollapsiblePlaylistCardState extends State<CollapsiblePlaylistCard>
   }
 
   Widget _buildEmptyState() {
+    final primaryColor = playlistColor;
+    
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: AppColors.textSecondary.withOpacity(0.05),
+          color: primaryColor.withOpacity(0.05),
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
-            color: AppColors.textSecondary.withOpacity(0.1),
+            color: primaryColor.withOpacity(0.2),
           ),
         ),
         child: Row(
           children: [
             Icon(
               Icons.info_outline,
-              color: AppColors.textSecondary,
+              color: primaryColor,
               size: 20,
             ),
             const SizedBox(width: 12),
@@ -384,7 +429,7 @@ class _CollapsiblePlaylistCardState extends State<CollapsiblePlaylistCard>
                 'No videos available in this playlist',
                 style: GoogleFonts.lato(
                   fontSize: 12,
-                  color: AppColors.textSecondary,
+                  color: primaryColor,
                 ),
               ),
             ),

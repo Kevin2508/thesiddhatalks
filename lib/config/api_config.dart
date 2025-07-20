@@ -1,5 +1,5 @@
 class ApiConfig {
-  static const String youtubeApiKey = 'AIzaSyCtu0zEoRBi788-cLV2kGZiMljHGNrAO0g';
+  static const String youtubeApiKey = 'AIzaSyBUShFncWY20u7xFKOLM_UF-X4UuQnoMYs';
   static const String youtubeBaseUrl = 'https://www.googleapis.com/youtube/v3';
   static const String channelHandle = '@meditation-j2t';
 

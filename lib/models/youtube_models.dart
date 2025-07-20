@@ -237,6 +237,21 @@ class LiveStream {
     );
   }
 
+  factory LiveStream.fromSearchJson(Map<String, dynamic> json) {
+    // For search results, we have limited data
+    return LiveStream(
+      id: json['id']['videoId'] as String,
+      title: json['snippet']['title'] as String,
+      description: json['snippet']['description'] as String? ?? '',
+      thumbnailUrl: json['snippet']['thumbnails']['high']['url'] as String,
+      channelTitle: json['snippet']['channelTitle'] as String,
+      publishedAt: DateTime.parse(json['snippet']['publishedAt'] as String),
+      status: LiveStreamStatus.live, // Search results are typically live
+      streamUrl: 'https://www.youtube.com/watch?v=${json['id']['videoId']}',
+      isPrivate: false,
+    );
+  }
+
   Map<String, dynamic> toJson() {
     return {
       'id': id,
