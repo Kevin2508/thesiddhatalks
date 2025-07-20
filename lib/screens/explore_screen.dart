@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:shimmer/shimmer.dart';
 import '../utils/app_colors.dart';
+import '../utils/transliteration_utils.dart';
 import '../models/youtube_models.dart';
 import '../services/optimized_youtube_service.dart';
 import '../services/app_initialization_service.dart';
@@ -19,6 +20,7 @@ class ExploreScreen extends StatefulWidget {
 class _ExploreScreenState extends State<ExploreScreen>
     with TickerProviderStateMixin {
   final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode();
   final OptimizedYouTubeService _youtubeService = OptimizedYouTubeService();
   late AnimationController _fadeController;
 
@@ -32,6 +34,8 @@ class _ExploreScreenState extends State<ExploreScreen>
   List<YouTubeVideo> _filteredVideos = [];
   Map<String, List<YouTubeVideo>> _categorizedVideos = {};
   List<String> _categories = ['All'];
+  List<String> _searchSuggestions = [];
+  bool _showSuggestions = false;
 
   bool _isLoading = true;
   bool _isSearching = false;
@@ -54,6 +58,13 @@ class _ExploreScreenState extends State<ExploreScreen>
     });
   }
 
+  /// Safe setState that checks if widget is still mounted
+  void _safeSetState(VoidCallback fn) {
+    if (mounted) {
+      setState(fn);
+    }
+  }
+
   void _checkInitializationAndLoad() async {
     // Check if app is initialized in current session
     if (AppInitializationService.isSessionInitialized) {
@@ -64,20 +75,53 @@ class _ExploreScreenState extends State<ExploreScreen>
           _sessionAllVideos != null && 
           _sessionCategorizedVideos != null) {
         print('📱 Using session-cached explore data (no Firebase calls)');
-        setState(() {
-          _categories = List.from(_sessionCategories!);
-          _allVideos = List.from(_sessionAllVideos!);
-          _filteredVideos = List.from(_sessionAllVideos!);
-          _categorizedVideos = Map.from(_sessionCategorizedVideos!);
-          _isLoading = false;
-        });
+        if (mounted) {
+          setState(() {
+            _categories = List.from(_sessionCategories!);
+            _allVideos = List.from(_sessionAllVideos!);
+            _filteredVideos = List.from(_sessionAllVideos!);
+            _categorizedVideos = Map.from(_sessionCategorizedVideos!);
+            _isLoading = false;
+          });
+        }
+        print('📱 Session cache restored: ${_allVideos.length} videos, ${_categories.length} categories');
       } else {
         print('🔥 Loading explore data from Firebase and caching to session');
         await _loadDataFromCacheAndStore();
       }
     } else {
-      print('⚠️ Session not initialized, redirecting to sync screen');
-      Navigator.of(context).pushReplacementNamed('/initial-sync');
+      print('⚠️ Session not initialized, initializing app first');
+      await _initializeAppAndLoad();
+    }
+  }
+
+  /// Initialize app data and then load explore screen data
+  Future<void> _initializeAppAndLoad() async {
+    try {
+      setState(() {
+        _isLoading = true;
+        _error = null;
+      });
+
+      print('🚀 Initializing app for the first time...');
+      final success = await AppInitializationService.initializeAppIfNeeded();
+      
+      if (success) {
+        print('✅ App initialization successful, loading explore data');
+        await _loadDataFromCacheAndStore();
+      } else {
+        print('❌ App initialization failed');
+        setState(() {
+          _error = 'Failed to initialize app data. Please check your internet connection.';
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      print('❌ Error during app initialization: $e');
+      setState(() {
+        _error = 'Failed to load data: $e';
+        _isLoading = false;
+      });
     }
   }
 
@@ -99,12 +143,15 @@ class _ExploreScreenState extends State<ExploreScreen>
       _sessionCategories = result['categories'] as List<String>;
       _sessionAllVideos = result['allVideos'] as List<YouTubeVideo>;
 
-      setState(() {
-        _categories = List.from(_sessionCategories!);
-        _allVideos = List.from(_sessionAllVideos!);
-        _filteredVideos = List.from(_sessionAllVideos!);
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _categories = List.from(_sessionCategories!);
+          _allVideos = List.from(_sessionAllVideos!);
+          _filteredVideos = List.from(_sessionAllVideos!);
+          _isLoading = false;
+        });
+      }
+      print('🔥 Data loaded from cache: ${_allVideos.length} videos, ${_categories.length} categories');
 
       // Categorize videos and store in session cache
       _categorizeVideos();
@@ -183,21 +230,53 @@ class _ExploreScreenState extends State<ExploreScreen>
     });
 
     try {
+      // First try remote search
       final searchResults = await _youtubeService.searchChannelVideos(
         query,
         limit: 30,
       );
 
+      // Enhance with local transliteration-based search
+      final localResults = _allVideos.where((video) {
+        return TransliterationUtils.matchesSearch(video.title, query) ||
+               TransliterationUtils.matchesSearch(video.description, query);
+      }).toList();
+
+      // Combine and deduplicate results
+      final combinedResults = <YouTubeVideo>[];
+      final seenIds = <String>{};
+
+      // Add remote results first (they're usually more relevant)
+      for (final video in searchResults) {
+        if (!seenIds.contains(video.id)) {
+          combinedResults.add(video);
+          seenIds.add(video.id);
+        }
+      }
+
+      // Add local transliteration matches
+      for (final video in localResults) {
+        if (!seenIds.contains(video.id)) {
+          combinedResults.add(video);
+          seenIds.add(video.id);
+        }
+      }
+
       setState(() {
-        _filteredVideos = searchResults;
+        _filteredVideos = combinedResults;
         _isSearching = false;
       });
+
+      print('🔍 Search completed: "${query}" found ${combinedResults.length} results');
+      print('   - Remote: ${searchResults.length}, Local: ${localResults.length}');
+      
     } catch (e) {
+      print('❌ Remote search failed, using local transliteration search: $e');
       setState(() {
         _isSearching = false;
       });
-      // Fall back to local search
-      _filterContent(query);
+      // Fall back to enhanced local search with transliteration
+      _filterContentWithTransliteration(query);
     }
   }
 
@@ -213,49 +292,72 @@ class _ExploreScreenState extends State<ExploreScreen>
         if (query.isEmpty) {
           _filteredVideos = videosToFilter;
         } else {
+          // Use enhanced transliteration-based filtering
           _filteredVideos = videosToFilter.where((video) {
-            return video.title.toLowerCase().contains(query.toLowerCase()) ||
-                video.description.toLowerCase().contains(query.toLowerCase());
+            return TransliterationUtils.matchesSearch(video.title, query) ||
+                   TransliterationUtils.matchesSearch(video.description, query) ||
+                   TransliterationUtils.matchesSearch(video.channelTitle, query);
           }).toList();
         }
       }
     });
   }
 
+  void _filterContentWithTransliteration(String query) {
+    setState(() {
+      List<YouTubeVideo> videosToFilter = _selectedCategory == 'All'
+          ? _allVideos
+          : _categorizedVideos[_selectedCategory] ?? [];
+
+      _filteredVideos = videosToFilter.where((video) {
+        return TransliterationUtils.matchesSearch(video.title, query) ||
+               TransliterationUtils.matchesSearch(video.description, query) ||
+               TransliterationUtils.matchesSearch(video.channelTitle, query);
+      }).toList();
+      
+      print('🔍 Local transliteration search: "${query}" found ${_filteredVideos.length} results');
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.primaryBackground,
-      resizeToAvoidBottomInset: true, // Handle keyboard properly
-      body: SafeArea(
-        child: RefreshIndicator(
-          onRefresh: () async {
-            await _youtubeService.forceRefresh();
-            await _loadData();
-          },
-          child: CustomScrollView(
-            slivers: [
-              // Header
-              SliverToBoxAdapter(
-                child: _buildHeader(),
-              ),
+    return GestureDetector(
+      onTap: () {
+        // Hide suggestions when tapping outside
+        if (_showSuggestions) {
+          setState(() {
+            _showSuggestions = false;
+          });
+        }
+        _searchFocusNode.unfocus();
+      },
+      child: Scaffold(
+        backgroundColor: AppColors.primaryBackground,
+        resizeToAvoidBottomInset: true,
+        body: SafeArea(
+          child: RefreshIndicator(
+            onRefresh: () async {
+              await _youtubeService.forceRefresh();
+              await _loadData();
+            },
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              child: Column(
+                children: [
+                  // Header
+                  _buildHeader(),
 
-              // Category Filter
-              if (!_isLoading)
-                SliverToBoxAdapter(
-                  child: _buildCategoryFilter(),
-                ),
+                  // Category Filter
+                  if (!_isLoading && _categories.isNotEmpty)
+                    _buildCategoryFilter(),
 
-              SliverToBoxAdapter(
-                child: const SizedBox(height: 20),
-              ),
+                  const SizedBox(height: 20),
 
-              // Content
-              SliverFillRemaining(
-                hasScrollBody: false,
-                child: _buildContent(),
+                  // Content
+                  _buildContent(),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ),
@@ -310,54 +412,189 @@ class _ExploreScreenState extends State<ExploreScreen>
           ),
           const SizedBox(height: 20),
 
-          // Search Bar
-          TextField(
-            controller: _searchController,
-            onChanged: (query) {
-              // Debounce search
-              Future.delayed(const Duration(milliseconds: 500), () {
-                if (_searchController.text == query) {
-                  _searchVideos(query);
-                }
-              });
-            },
-            style: GoogleFonts.lato(
-              color: AppColors.textPrimary,
-              fontSize: 16,
-            ),
-            decoration: InputDecoration(
-              hintText: 'Search teachings...',
-              hintStyle: GoogleFonts.lato(
-                color: AppColors.textSecondary,
-                fontSize: 16,
-              ),
-              prefixIcon: Icon(
-                Icons.search,
-                color: AppColors.textSecondary,
-              ),
-              suffixIcon: _searchController.text.isNotEmpty
-                  ? IconButton(
-                icon: Icon(
-                  Icons.clear,
-                  color: AppColors.textSecondary,
-                ),
-                onPressed: () {
-                  _searchController.clear();
-                  _filterContent('');
+          // Enhanced Search Bar with Transliteration Support
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextField(
+                controller: _searchController,
+                focusNode: _searchFocusNode,
+                onChanged: (query) {
+                  // Update suggestions
+                  if (query.isNotEmpty) {
+                    setState(() {
+                      _searchSuggestions = TransliterationUtils.getSearchSuggestions(
+                        query, 
+                        _allVideos.map((v) => v.title).toList()
+                      );
+                      _showSuggestions = _searchSuggestions.isNotEmpty;
+                    });
+                  } else {
+                    setState(() {
+                      _showSuggestions = false;
+                      _searchSuggestions = [];
+                    });
+                  }
+
+                  // Debounce search
+                  Future.delayed(const Duration(milliseconds: 500), () {
+                    if (_searchController.text == query) {
+                      if (query.isNotEmpty) {
+                        _searchVideos(query);
+                      } else {
+                        _filterContent('');
+                      }
+                    }
+                  });
                 },
-              )
-                  : null,
-              filled: true,
-              fillColor: AppColors.surfaceBackground,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(16),
-                borderSide: BorderSide.none,
+                onTap: () {
+                  if (_searchController.text.isNotEmpty && _searchSuggestions.isNotEmpty) {
+                    setState(() {
+                      _showSuggestions = true;
+                    });
+                  }
+                },
+                style: GoogleFonts.lato(
+                  color: AppColors.textPrimary,
+                  fontSize: 16,
+                ),
+                decoration: InputDecoration(
+                  hintText: 'Search teachings... (Hindi/English supported)',
+                  hintStyle: GoogleFonts.lato(
+                    color: AppColors.textSecondary,
+                    fontSize: 14,
+                  ),
+                  prefixIcon: Icon(
+                    Icons.search,
+                    color: AppColors.textSecondary,
+                  ),
+                  suffixIcon: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (_searchController.text.isNotEmpty)
+                        IconButton(
+                          icon: Icon(
+                            Icons.clear,
+                            color: AppColors.textSecondary,
+                          ),
+                          onPressed: () {
+                            _searchController.clear();
+                            _filterContent('');
+                            setState(() {
+                              _showSuggestions = false;
+                              _searchSuggestions = [];
+                            });
+                            _searchFocusNode.unfocus();
+                          },
+                        ),
+                      Container(
+                        margin: const EdgeInsets.only(right: 8),
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: AppColors.primaryAccent.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          'हिंदी',
+                          style: GoogleFonts.lato(
+                            fontSize: 10,
+                            color: AppColors.primaryAccent,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  filled: true,
+                  fillColor: AppColors.surfaceBackground,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    borderSide: BorderSide.none,
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    borderSide: BorderSide(
+                      color: AppColors.primaryAccent.withOpacity(0.5),
+                      width: 2,
+                    ),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 16,
+                  ),
+                ),
               ),
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 20,
-                vertical: 16,
-              ),
-            ),
+              
+              // Search Suggestions
+              if (_showSuggestions && _searchSuggestions.isNotEmpty)
+                Container(
+                  margin: const EdgeInsets.only(top: 8),
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceBackground,
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.shadowLight,
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        child: Text(
+                          'Suggestions',
+                          style: GoogleFonts.lato(
+                            fontSize: 12,
+                            color: AppColors.textSecondary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      ...(_searchSuggestions.take(3).map((suggestion) => 
+                        InkWell(
+                          onTap: () {
+                            _searchController.text = suggestion;
+                            _searchVideos(suggestion);
+                            setState(() {
+                              _showSuggestions = false;
+                            });
+                            _searchFocusNode.unfocus();
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.search,
+                                  size: 16,
+                                  color: AppColors.textSecondary,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    suggestion,
+                                    style: GoogleFonts.lato(
+                                      fontSize: 14,
+                                      color: AppColors.textPrimary,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ).toList()),
+                    ],
+                  ),
+                ),
+            ],
           ),
         ],
       ),
@@ -485,7 +722,8 @@ class _ExploreScreenState extends State<ExploreScreen>
   Widget _buildSkeletonLoading() {
     return GridView.builder(
       padding: const EdgeInsets.symmetric(horizontal: 20),
-      physics: const BouncingScrollPhysics(),
+      physics: const NeverScrollableScrollPhysics(),
+      shrinkWrap: true,
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 2,
         childAspectRatio: 0.7,
@@ -605,10 +843,11 @@ class _ExploreScreenState extends State<ExploreScreen>
   Widget _buildVideoGrid() {
     return GridView.builder(
       padding: const EdgeInsets.symmetric(horizontal: 20),
-      physics: const BouncingScrollPhysics(),
+      physics: const NeverScrollableScrollPhysics(), // Disable scrolling to avoid conflicts
+      shrinkWrap: true, // Allow grid to size itself
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 2,
-        childAspectRatio: 0.7, // Adjusted for better title visibility
+        childAspectRatio: 0.7,
         crossAxisSpacing: 16,
         mainAxisSpacing: 16,
       ),
@@ -634,60 +873,53 @@ class _ExploreScreenState extends State<ExploreScreen>
   }
 
   Widget _buildEmptyState() {
-    return SingleChildScrollView(
-      child: ConstrainedBox(
-        constraints: BoxConstraints(
-          minHeight: MediaQuery.of(context).size.height * 0.4,
-        ),
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  Icons.search_off,
-                  size: 64,
-                  color: AppColors.textSecondary.withOpacity(0.5),
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'No videos found',
-                  style: GoogleFonts.rajdhani(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Try adjusting your search terms\nor exploring different categories',
-                  style: GoogleFonts.lato(
-                    fontSize: 16,
-                    color: AppColors.textSecondary,
-                    height: 1.4,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 24),
-                ElevatedButton(
-                  onPressed: () {
-                    _searchController.clear();
-                    setState(() {
-                      _selectedCategory = 'All';
-                    });
-                    _filterContent('');
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primaryAccent,
-                    foregroundColor: Colors.white,
-                  ),
-                  child: Text('Show All Videos'),
-                ),
-              ],
+    return Padding(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const SizedBox(height: 40),
+          Icon(
+            Icons.search_off,
+            size: 64,
+            color: AppColors.textSecondary.withOpacity(0.5),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'No videos found',
+            style: GoogleFonts.rajdhani(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: AppColors.textSecondary,
             ),
           ),
-        ),
+          const SizedBox(height: 8),
+          Text(
+            'Try adjusting your search terms\nor exploring different categories',
+            style: GoogleFonts.lato(
+              fontSize: 16,
+              color: AppColors.textSecondary,
+              height: 1.4,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 24),
+          ElevatedButton(
+            onPressed: () {
+              _searchController.clear();
+              setState(() {
+                _selectedCategory = 'All';
+              });
+              _filterContent('');
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primaryAccent,
+              foregroundColor: Colors.white,
+            ),
+            child: Text('Show All Videos'),
+          ),
+          const SizedBox(height: 40),
+        ],
       ),
     );
   }
@@ -753,6 +985,7 @@ class _ExploreScreenState extends State<ExploreScreen>
   void dispose() {
     _fadeController.dispose();
     _searchController.dispose();
+    _searchFocusNode.dispose();
     super.dispose();
   }
 }
