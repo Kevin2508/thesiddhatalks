@@ -8,7 +8,6 @@ class YouTubeFirebaseCache {
   static CollectionReference get _playlistsCollection => _firestore.collection('youtube_playlists');
   static CollectionReference get _videosCollection => _firestore.collection('youtube_videos');
   static CollectionReference get _liveStreamsCollection => _firestore.collection('youtube_live_streams');
-  static CollectionReference get _channelInfoCollection => _firestore.collection('youtube_channel_info');
   static CollectionReference get _cacheMetadataCollection => _firestore.collection('youtube_cache_metadata');
   
   static const String _channelId = 'UChMsjzqgMrj4laOTWYyJBQw';

@@ -5,11 +5,10 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:provider/provider.dart';
 import 'firebase_options.dart';
 import 'providers/auth_provider.dart';
+import 'providers/video_provider.dart';
 import 'services/auth_service.dart';
-import 'services/app_initialization_service.dart';
 import 'widgets/auth_wrapper.dart';
 import 'screens/splash_screen.dart';
-import 'screens/welcome_splash_screen.dart';
 import 'screens/initial_sync_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/player_screen.dart';
@@ -77,6 +76,12 @@ class SiddhaTalkApp extends StatelessWidget {
           create: (_) {
             print('Creating AuthProvider...');
             return AuthProvider();
+          },
+        ),
+        ChangeNotifierProvider(
+          create: (_) {
+            print('Creating VideoProvider...');
+            return VideoProvider();
           },
         ),
       ],
@@ -163,8 +168,6 @@ class SiddhaTalkApp extends StatelessWidget {
           switch (settings.name) {
             case '/':
               return _createRoute(const SplashScreen());
-            case '/welcome':
-              return _createRoute(const WelcomeSplashScreen());
             case '/initial-sync':
               return _createRoute(const InitialSyncScreen());
             case '/auth':

@@ -9,6 +9,7 @@ class YouTubeVideo {
   final int viewCount;
   final int likeCount;
   final bool isNew;
+  final String? pcloudUrl; // Added pCloud URL field
 
   YouTubeVideo({
     required this.id,
@@ -21,6 +22,7 @@ class YouTubeVideo {
     required this.viewCount,
     required this.likeCount,
     this.isNew = false,
+    this.pcloudUrl, // Added pCloud URL parameter
   });
 
   factory YouTubeVideo.fromJson(Map<String, dynamic> json) {

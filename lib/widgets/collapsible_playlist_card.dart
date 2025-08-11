@@ -80,19 +80,11 @@ class _CollapsiblePlaylistCardState extends State<CollapsiblePlaylistCard>
   @override
   Widget build(BuildContext context) {
     final primaryColor = playlistColor;
-    final secondaryColor = playlistColor.withOpacity(0.7);
     
     return Container(
-      margin: const EdgeInsets.only(bottom: 16),
+       // Reduced from 16 to 6
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            primaryColor.withOpacity(0.1),
-            secondaryColor.withOpacity(0.05),
-          ],
-        ),
+        color: Colors.transparent, // Single solid color instead of gradient
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: primaryColor.withOpacity(0.3),
@@ -118,33 +110,17 @@ class _CollapsiblePlaylistCardState extends State<CollapsiblePlaylistCard>
               },
               borderRadius: BorderRadius.circular(16),
               child: Container(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      primaryColor.withOpacity(0.15),
-                      secondaryColor.withOpacity(0.08),
-                    ],
-                  ),
                   borderRadius: BorderRadius.circular(16),
                 ),
                 child: Row(
                   children: [
-                    // Colorful playlist icon
+                    // Playlist logo from assets
                     Container(
                       width: 48,
                       height: 48,
                       decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [
-                            primaryColor,
-                            secondaryColor,
-                          ],
-                        ),
                         borderRadius: BorderRadius.circular(12),
                         boxShadow: [
                           BoxShadow(
@@ -154,10 +130,30 @@ class _CollapsiblePlaylistCardState extends State<CollapsiblePlaylistCard>
                           ),
                         ],
                       ),
-                      child: Icon(
-                        Icons.playlist_play,
-                        color: Colors.white,
-                        size: 24,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: Image.asset(
+                          _getCategoryLogoPath(widget.playlist.title),
+                          width: 48,
+                          height: 48,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) {
+                            // Fallback to colored icon if asset image not found
+                            return Container(
+                              width: 48,
+                              height: 48,
+                              decoration: BoxDecoration(
+                                color: primaryColor,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Icon(
+                                Icons.playlist_play,
+                                color: Colors.white,
+                                size: 24,
+                              ),
+                            );
+                          },
+                        ),
                       ),
                     ),
                     const SizedBox(width: 16),
@@ -176,37 +172,6 @@ class _CollapsiblePlaylistCardState extends State<CollapsiblePlaylistCard>
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                           ),
-                          const SizedBox(height: 4),
-                          Row(
-                            children: [
-                              Icon(
-                                Icons.play_circle_outline,
-                                size: 16,
-                                color: primaryColor,
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                '${widget.videos.length} videos',
-                                style: GoogleFonts.lato(
-                                  fontSize: 12,
-                                  color: primaryColor,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
-                          ),
-                          if (widget.playlist.description.isNotEmpty) ...[
-                            const SizedBox(height: 4),
-                            Text(
-                              widget.playlist.description,
-                              style: GoogleFonts.lato(
-                                fontSize: 11,
-                                color: AppColors.textSecondary.withOpacity(0.8),
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ],
                         ],
                       ),
                     ),
@@ -260,6 +225,9 @@ class _CollapsiblePlaylistCardState extends State<CollapsiblePlaylistCard>
     final primaryColor = playlistColor;
     
     return Container(
+      constraints: const BoxConstraints(
+        maxHeight: 150, // Reduced to fit better in the new layout
+      ),
       decoration: BoxDecoration(
         border: Border(
           top: BorderSide(
@@ -270,10 +238,10 @@ class _CollapsiblePlaylistCardState extends State<CollapsiblePlaylistCard>
       ),
       child: ListView.separated(
         shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(16),
+        physics: const ClampingScrollPhysics(), // Allow scrolling if content overflows
+        padding: const EdgeInsets.all(12), // Reduced padding from 16 to 12
         itemCount: widget.videos.length,
-        separatorBuilder: (context, index) => const SizedBox(height: 12),
+        separatorBuilder: (context, index) => const SizedBox(height: 8), // Reduced from 12 to 8
         itemBuilder: (context, index) {
           return _buildVideoItem(widget.videos[index]);
         },
@@ -285,11 +253,11 @@ class _CollapsiblePlaylistCardState extends State<CollapsiblePlaylistCard>
     final primaryColor = playlistColor;
     
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.only(bottom: 4), // Reduced from 8 to 4
+      padding: const EdgeInsets.all(8), // Reduced from 12 to 8
       decoration: BoxDecoration(
         color: Colors.white.withOpacity(0.5),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(10), // Reduced from 12 to 10
         border: Border.all(
           color: primaryColor.withOpacity(0.2),
         ),
@@ -303,15 +271,15 @@ class _CollapsiblePlaylistCardState extends State<CollapsiblePlaylistCard>
       ),
       child: InkWell(
         onTap: () => widget.onVideoTap(video),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(10),
         child: Row(
           children: [
             // Thumbnail
             ClipRRect(
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(6), // Reduced from 8 to 6
               child: Container(
-                width: 80,
-                height: 60,
+                width: 60, // Reduced from 80 to 60
+                height: 45, // Reduced from 60 to 45
                 decoration: BoxDecoration(
                   color: AppColors.textSecondary.withOpacity(0.1),
                 ),
@@ -324,14 +292,14 @@ class _CollapsiblePlaylistCardState extends State<CollapsiblePlaylistCard>
                       child: Icon(
                         Icons.play_circle_outline,
                         color: AppColors.textSecondary,
-                        size: 24,
+                        size: 20, // Reduced from 24 to 20
                       ),
                     );
                   },
                 ),
               ),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 10), // Reduced from 12 to 10
             // Video details
             Expanded(
               child: Column(
@@ -340,38 +308,38 @@ class _CollapsiblePlaylistCardState extends State<CollapsiblePlaylistCard>
                   Text(
                     video.title,
                     style: GoogleFonts.lato(
-                      fontSize: 14,
+                      fontSize: 13, // Reduced from 14 to 13
                       fontWeight: FontWeight.w600,
                       color: AppColors.textPrimary,
                     ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 3), // Reduced from 4 to 3
                   Row(
                     children: [
                       if (video.duration.isNotEmpty)
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1), // Reduced padding
                           decoration: BoxDecoration(
                             color: primaryColor.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(4),
+                            borderRadius: BorderRadius.circular(3), // Reduced from 4 to 3
                           ),
                           child: Text(
                             video.duration,
                             style: GoogleFonts.lato(
-                              fontSize: 10,
+                              fontSize: 9, // Reduced from 10 to 9
                               fontWeight: FontWeight.w500,
                               color: primaryColor,
                             ),
                           ),
                         ),
                       Padding(
-                        padding: const EdgeInsets.only(left: 6),
+                        padding: const EdgeInsets.only(left: 5), // Reduced from 6 to 5
                         child: Text(
                           '${_formatViewCount(video.viewCount)} views',
                           style: GoogleFonts.lato(
-                            fontSize: 10,
+                            fontSize: 9, // Reduced from 10 to 9
                             color: AppColors.textSecondary,
                           ),
                         ),
@@ -384,12 +352,43 @@ class _CollapsiblePlaylistCardState extends State<CollapsiblePlaylistCard>
             // Action button - only save/watchlist button
             WatchlistButton(
               video: video,
-              size: 20,
+              size: 18, // Reduced from 20 to 18
             ),
           ],
         ),
       ),
     );
+  }
+
+  String _getCategoryLogoPath(String categoryName) {
+    // Map each category to its specific logo path
+    switch (categoryName) {
+      case 'Chakra Alignment':
+        return 'assets/images/logos/chakra_alignment_logo.png';
+      case 'Protection Layer':
+        return 'assets/images/logos/protection_layer_logo.png';
+      case 'Mangal Kamana':
+        return 'assets/images/logos/mangal_kamna_logo.png';
+      case 'Cleansing':
+        return 'assets/images/logos/cleansing_logo.png';
+      case 'Breathing Technique':
+        return 'assets/images/logos/breathing_technique_logo.png';
+      case 'Sahaj Dhyan':
+        return 'assets/images/logos/sahaj_dhyan_logo.png';
+      case 'Ratri Dhyan':
+        return 'assets/images/logos/ratri_dhyan_logo.png';
+      case 'Devine Energy':
+        return 'assets/images/logos/devine_energy_logo.png';
+      case 'Gibberish':
+        return 'assets/images/logos/gibberish_logo.png';
+      case 'Kundali':
+        return 'assets/images/logos/kundali_logo.png';
+      case 'Standing Meditation':
+        return 'assets/images/logos/standing_meditation_logo.png';
+      default:
+        // Fallback to default logo
+        return 'assets/images/siddhvachan_logo.png';
+    }
   }
 
   String _formatViewCount(int viewCount) {

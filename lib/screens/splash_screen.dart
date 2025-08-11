@@ -91,7 +91,7 @@ class _SplashScreenState extends State<SplashScreen>
     // Check auth status and navigate accordingly
     switch (authProvider.status) {
       case AuthStatus.authenticated:
-        Navigator.of(context).pushReplacementNamed('/welcome');
+        Navigator.of(context).pushReplacementNamed('/home');
         break;
       case AuthStatus.unauthenticated:
         Navigator.of(context).pushReplacementNamed('/login');

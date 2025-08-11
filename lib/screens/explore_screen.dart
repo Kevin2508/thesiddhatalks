@@ -58,13 +58,6 @@ class _ExploreScreenState extends State<ExploreScreen>
     });
   }
 
-  /// Safe setState that checks if widget is still mounted
-  void _safeSetState(VoidCallback fn) {
-    if (mounted) {
-      setState(fn);
-    }
-  }
-
   void _checkInitializationAndLoad() async {
     // Check if app is initialized in current session
     if (AppInitializationService.isSessionInitialized) {
@@ -847,7 +840,7 @@ class _ExploreScreenState extends State<ExploreScreen>
       shrinkWrap: true, // Allow grid to size itself
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 2,
-        childAspectRatio: 0.7,
+        childAspectRatio: 0.65, // Reduced from 0.7 to give more height for title display
         crossAxisSpacing: 16,
         mainAxisSpacing: 16,
       ),
@@ -869,7 +862,7 @@ class _ExploreScreenState extends State<ExploreScreen>
         return entry.key;
       }
     }
-    return 'General';
+    return ''; // Return empty string instead of 'General'
   }
 
   Widget _buildEmptyState() {
@@ -1117,89 +1110,91 @@ class _ExploreVideoCardState extends State<ExploreVideoCard>
                             child: _buildThumbnail(),
                           ),
 
-                          // Content - Increased space for better title visibility
+                          // Content - Better title display with more space
                           Expanded(
-                            flex: 2,
+                            flex: 3, // Increased from 2 to 3 for more title space
                             child: Padding(
                               padding: const EdgeInsets.all(12),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  // Category badge
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 8,
-                                      vertical: 3,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: AppColors.primaryAccent.withOpacity(0.15),
-                                      borderRadius: BorderRadius.circular(6),
-                                    ),
-                                    child: Text(
-                                      widget.category,
-                                      style: GoogleFonts.lato(
-                                        fontSize: 10,
-                                        color: AppColors.primaryAccent,
-                                        fontWeight: FontWeight.w700,
+                                  // Category badge - hide if it's "General" or empty
+                                  if (widget.category != 'General' && widget.category.isNotEmpty)
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 6,
+                                        vertical: 2,
                                       ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
+                                      decoration: BoxDecoration(
+                                        color: AppColors.primaryAccent.withOpacity(0.15),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Text(
+                                        widget.category,
+                                        style: GoogleFonts.lato(
+                                          fontSize: 9,
+                                          color: AppColors.primaryAccent,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
                                     ),
-                                  ),
 
-                                  const SizedBox(height: 8),
+                                  SizedBox(height: (widget.category != 'General' && widget.category.isNotEmpty) ? 6 : 0),
 
-                                  // Title - More space allocated
+                                  // Title - Much more space allocated with better line height
                                   Expanded(
+                                    flex: 3, // Give title most of the space
                                     child: Text(
                                       widget.video.title,
                                       style: GoogleFonts.lato(
-                                        fontSize: 14, // Increased font size
+                                        fontSize: 13,
                                         fontWeight: FontWeight.w600,
                                         color: AppColors.textPrimary,
-                                        height: 1.3,
+                                        height: 1.2, // Tighter line height for better space usage
                                       ),
-                                      maxLines: 3, // Increased from 2 to 3
+                                      maxLines: 4, // Allow up to 4 lines for longer titles
                                       overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
 
-                                  const SizedBox(height: 8),
+                                  const SizedBox(height: 4),
 
-                                  // Stats row
+                                  // Stats row - more compact
                                   Row(
                                     children: [
                                       Icon(
                                         Icons.visibility,
-                                        size: 14,
+                                        size: 12,
                                         color: AppColors.textSecondary,
                                       ),
-                                      const SizedBox(width: 4),
+                                      const SizedBox(width: 3),
                                       Expanded(
                                         child: Text(
                                           _formatViewCount(widget.video.viewCount),
                                           style: GoogleFonts.lato(
-                                            fontSize: 12,
+                                            fontSize: 11,
                                             color: AppColors.textSecondary,
                                             fontWeight: FontWeight.w500,
                                           ),
                                         ),
                                       ),
-                                      // Duration
+                                      // Duration - smaller and more compact
                                       if (widget.video.duration.isNotEmpty)
                                         Container(
                                           padding: const EdgeInsets.symmetric(
-                                            horizontal: 6,
-                                            vertical: 2,
+                                            horizontal: 4,
+                                            vertical: 1,
                                           ),
                                           decoration: BoxDecoration(
                                             color: AppColors.textSecondary.withOpacity(0.1),
-                                            borderRadius: BorderRadius.circular(4),
+                                            borderRadius: BorderRadius.circular(3),
                                           ),
                                           child: Text(
                                             widget.video.duration,
                                             style: GoogleFonts.lato(
-                                              fontSize: 10,
+                                              fontSize: 9,
                                               color: AppColors.textSecondary,
                                               fontWeight: FontWeight.w600,
                                             ),
