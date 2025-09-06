@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../utils/app_colors.dart';
-import '../services/app_initialization_service.dart';
+import '../services/firestore_video_service.dart';
 
 class InitialSyncScreen extends StatefulWidget {
   const InitialSyncScreen({Key? key}) : super(key: key);
@@ -72,9 +72,9 @@ class _InitialSyncScreenState extends State<InitialSyncScreen>
         _statusMessage = 'Loading playlists and content...';
       });
 
-      final success = await AppInitializationService.initializeAppIfNeeded();
-
-      if (success) {
+      try {
+        await FirestoreVideoService.fetchAllVideos();
+        
         setState(() {
           _statusMessage = 'Almost ready...';
         });
@@ -84,9 +84,9 @@ class _InitialSyncScreenState extends State<InitialSyncScreen>
         if (mounted) {
           Navigator.of(context).pushReplacementNamed('/main');
         }
-      } else {
+      } catch (e) {
         setState(() {
-          _error = 'Failed to load content. Please check your internet connection.';
+          _error = 'Error loading content. Please check your connection.';
           _isLoading = false;
         });
       }

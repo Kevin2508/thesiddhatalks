@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
+import '../models/auth_status.dart';
 import '../screens/login_screen.dart';
 import '../screens/splash_screen.dart';
 import '../main.dart';
-import '../services/auth_service.dart';
 
 class AuthWrapper extends StatelessWidget {
   const AuthWrapper({Key? key}) : super(key: key);

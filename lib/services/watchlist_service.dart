@@ -1,6 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../models/youtube_models.dart';
+import '../models/video_models.dart';
 
 class WatchlistService {
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -14,7 +14,7 @@ class WatchlistService {
       _firestore.collection('watchlists');
 
   // Add video to watchlist
-  static Future<bool> addToWatchlist(YouTubeVideo video) async {
+  static Future<bool> addToWatchlist(Video video) async {
     try {
       if (_userId == null) {
         print('❌ User not authenticated');
@@ -57,7 +57,7 @@ class WatchlistService {
   }
 
   // Remove video from watchlist
-  static Future<bool> removeFromWatchlist(String videoId) async {
+  static Future<bool> removeFromWatchlist(String userId, Video video) async {
     try {
       if (_userId == null) {
         print('❌ User not authenticated');
@@ -66,11 +66,11 @@ class WatchlistService {
 
       final docRef = _watchlistCollection.doc(_userId);
       await docRef.update({
-        'videos.$videoId': FieldValue.delete(),
+        'videos.${video.id}': FieldValue.delete(),
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
-      print('✅ Video removed from watchlist: $videoId');
+      print('✅ Video removed from watchlist: ${video.id}');
       return true;
     } catch (e) {
       print('❌ Error removing from watchlist: $e');
@@ -79,7 +79,7 @@ class WatchlistService {
   }
 
   // Check if video is in watchlist
-  static Future<bool> isInWatchlist(String videoId) async {
+  static Future<bool> isInWatchlist(String userId, Video video) async {
     try {
       if (_userId == null) return false;
 
@@ -89,7 +89,7 @@ class WatchlistService {
       final data = doc.data() as Map<String, dynamic>?;
       final videos = data?['videos'] as Map<String, dynamic>?;
       
-      return videos?.containsKey(videoId) ?? false;
+      return videos?.containsKey(video.id) ?? false;
     } catch (e) {
       print('❌ Error checking watchlist: $e');
       return false;
@@ -97,7 +97,7 @@ class WatchlistService {
   }
 
   // Get all watchlist videos
-  static Future<List<YouTubeVideo>> getWatchlistVideos() async {
+  static Future<List<Video>> getWatchlistVideos() async {
     try {
       if (_userId == null) {
         print('❌ User not authenticated');
@@ -112,15 +112,15 @@ class WatchlistService {
 
       if (videosMap == null) return [];
 
-      final List<YouTubeVideo> videos = [];
+      final List<Video> videos = [];
       
       for (final entry in videosMap.entries) {
         try {
           final videoData = entry.value as Map<String, dynamic>;
-          // Remove the addedAt field before converting to YouTubeVideo
+          // Remove the addedAt field before converting to Video
           videoData.remove('addedAt');
           
-          final video = YouTubeVideo.fromJson(videoData);
+          final video = Video.fromJson(videoData);
           videos.add(video);
         } catch (e) {
           print('❌ Error parsing video ${entry.key}: $e');
@@ -148,28 +148,28 @@ class WatchlistService {
   }
 
   // Get watchlist stream for real-time updates
-  static Stream<List<YouTubeVideo>> watchlistStream() {
+  static Stream<List<Video>> watchlistStream() {
     if (_userId == null) {
       return Stream.value([]);
     }
 
     return _watchlistCollection.doc(_userId).snapshots().map((doc) {
-      if (!doc.exists) return <YouTubeVideo>[];
+      if (!doc.exists) return <Video>[];
 
       final data = doc.data() as Map<String, dynamic>?;
       final videosMap = data?['videos'] as Map<String, dynamic>?;
 
-      if (videosMap == null) return <YouTubeVideo>[];
+      if (videosMap == null) return <Video>[];
 
-      final List<YouTubeVideo> videos = [];
+      final List<Video> videos = [];
       
       for (final entry in videosMap.entries) {
         try {
           final videoData = Map<String, dynamic>.from(entry.value as Map<String, dynamic>);
-          // Remove the addedAt field before converting to YouTubeVideo
+          // Remove the addedAt field before converting to Video
           videoData.remove('addedAt');
           
-          final video = YouTubeVideo.fromJson(videoData);
+          final video = Video.fromJson(videoData);
           videos.add(video);
         } catch (e) {
           print('❌ Error parsing video ${entry.key}: $e');

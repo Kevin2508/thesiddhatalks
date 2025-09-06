@@ -2,15 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../utils/app_colors.dart';
-import '../models/youtube_models.dart';
+import '../models/video_models.dart';
 import 'watchlist_button.dart';
 
 class CollapsiblePlaylistCard extends StatefulWidget {
   final PlaylistInfo playlist;
-  final List<YouTubeVideo> videos;
+  final List<Video> videos;
   final bool isExpanded;
   final VoidCallback onToggle;
-  final Function(YouTubeVideo) onVideoTap;
+  final Function(Video) onVideoTap;
   final int index; // Add index parameter for alternating colors
 
   const CollapsiblePlaylistCard({
@@ -249,7 +249,7 @@ class _CollapsiblePlaylistCardState extends State<CollapsiblePlaylistCard>
     );
   }
 
-  Widget _buildVideoItem(YouTubeVideo video) {
+  Widget _buildVideoItem(Video video) {
     final primaryColor = playlistColor;
     
     return Container(
@@ -334,16 +334,7 @@ class _CollapsiblePlaylistCardState extends State<CollapsiblePlaylistCard>
                             ),
                           ),
                         ),
-                      Padding(
-                        padding: const EdgeInsets.only(left: 5), // Reduced from 6 to 5
-                        child: Text(
-                          '${_formatViewCount(video.viewCount)} views',
-                          style: GoogleFonts.lato(
-                            fontSize: 9, // Reduced from 10 to 9
-                            color: AppColors.textSecondary,
-                          ),
-                        ),
-                      ),
+                      
                     ],
                   ),
                 ],

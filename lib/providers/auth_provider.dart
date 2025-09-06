@@ -2,6 +2,8 @@ import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../services/auth_service.dart';
 import '../models/user_model.dart';
+import '../models/auth_status.dart';
+import '../utils/network_utils.dart';
 
 class AuthProvider extends ChangeNotifier {
   final AuthService _authService = AuthService();
@@ -14,6 +16,7 @@ class AuthProvider extends ChangeNotifier {
   UserModel? get user => _user;
   String? get errorMessage => _errorMessage;
   bool get isAuthenticated => _status == AuthStatus.authenticated;
+  User? get firebaseUser => _authService.currentUser;
 
   AuthProvider() {
     _initializeAuth();
@@ -23,23 +26,36 @@ class AuthProvider extends ChangeNotifier {
     try {
       print('AuthProvider: Initializing auth...');
       
+      // Give a moment for Firebase Auth to restore state after app startup
+      await Future.delayed(const Duration(milliseconds: 200));
+      
       // Check if user is already signed in
       final currentUser = _authService.currentUser;
+      
       if (currentUser != null) {
         print('AuthProvider: User already signed in: ${currentUser.uid}');
         print('AuthProvider: User email: ${currentUser.email}');
         
-        // Ensure user document exists
-        await _authService.createUserDocumentIfNeeded(currentUser);
-        
-        _user = await _authService.getUserData();
-        _status = AuthStatus.authenticated;
-        print('AuthProvider: Initial auth complete. User: ${_user?.email}');
-        notifyListeners();
+        try {
+          // Ensure user document exists
+          await _authService.createUserDocumentIfNeeded(currentUser);
+          
+          _user = await _authService.getUserData();
+          _status = AuthStatus.authenticated;
+          print('AuthProvider: Initial auth complete. User: ${_user?.email}');
+        } catch (e) {
+          print('AuthProvider: Error loading user data: $e');
+          // Even if user data fails due to Firestore issues, keep user authenticated 
+          // if Firebase user exists
+          _status = AuthStatus.authenticated;
+          _user = null; // Clear user data but keep authenticated status
+          print('AuthProvider: Keeping authenticated status despite Firestore error');
+        }
       } else {
+        print('AuthProvider: No current user found, setting unauthenticated');
         _status = AuthStatus.unauthenticated;
-        notifyListeners();
       }
+      notifyListeners();
       
       // Listen to auth state changes
       _authService.authStateChanges.listen((User? firebaseUser) async {
@@ -69,8 +85,16 @@ class AuthProvider extends ChangeNotifier {
           }
         } catch (e) {
           print('AuthProvider: Error in auth state change: $e');
-          _status = AuthStatus.unauthenticated;
-          _user = null;
+          // Don't set as unauthenticated if it's just a Firestore permission issue
+          // The Firebase user is still authenticated, just can't access Firestore data
+          if (firebaseUser != null) {
+            print('AuthProvider: Firebase user still exists despite Firestore error, keeping authenticated status');
+            _status = AuthStatus.authenticated;
+            _user = null; // Clear user data but keep authenticated status
+          } else {
+            _status = AuthStatus.unauthenticated;
+            _user = null;
+          }
         }
         notifyListeners();
       });
@@ -93,7 +117,7 @@ class AuthProvider extends ChangeNotifier {
         await _authService.createUserDocumentIfNeeded(currentUser);
         
         _user = await _authService.getUserData();
-        _status = _user != null ? AuthStatus.authenticated : AuthStatus.unauthenticated;
+        _status = AuthStatus.authenticated;
         print('AuthProvider: User data refreshed. Status: $_status, User: ${_user?.email}');
         notifyListeners();
       } else {
@@ -104,6 +128,17 @@ class AuthProvider extends ChangeNotifier {
       }
     } catch (e) {
       print('AuthProvider: Error refreshing user data: $e');
+      // Keep authenticated if Firebase user exists, even if Firestore fails
+      final currentUser = _authService.currentUser;
+      if (currentUser != null) {
+        print('AuthProvider: Keeping authenticated status despite refresh error');
+        _status = AuthStatus.authenticated;
+        _user = null;
+      } else {
+        _status = AuthStatus.unauthenticated;
+        _user = null;
+      }
+      notifyListeners();
     }
   }
 
@@ -115,6 +150,14 @@ class AuthProvider extends ChangeNotifier {
   }) async {
     try {
       _setLoading();
+      
+      // Check network connectivity first
+      final hasConnection = await NetworkUtils.hasInternetConnection();
+      if (!hasConnection) {
+        _setError(NetworkUtils.getAuthNetworkErrorMessage());
+        return false;
+      }
+      
       await _authService.signUpWithEmailPassword(
         email: email,
         password: password,
@@ -123,7 +166,8 @@ class AuthProvider extends ChangeNotifier {
       _clearError();
       return true;
     } catch (e) {
-      _setError(e.toString());
+      // Use user-friendly error message
+      _setError(NetworkUtils.getUserFriendlyAuthError(e.toString()));
       return false;
     }
   }
@@ -135,6 +179,14 @@ class AuthProvider extends ChangeNotifier {
   }) async {
     try {
       _setLoading();
+      
+      // Check network connectivity first
+      final hasConnection = await NetworkUtils.hasInternetConnection();
+      if (!hasConnection) {
+        _setError(NetworkUtils.getAuthNetworkErrorMessage());
+        return false;
+      }
+      
       await _authService.signInWithEmailPassword(
         email: email,
         password: password,
@@ -142,7 +194,8 @@ class AuthProvider extends ChangeNotifier {
       _clearError();
       return true;
     } catch (e) {
-      _setError(e.toString());
+      // Use user-friendly error message
+      _setError(NetworkUtils.getUserFriendlyAuthError(e.toString()));
       return false;
     }
   }
@@ -150,6 +203,13 @@ class AuthProvider extends ChangeNotifier {
   // Google Sign In
   Future<bool> signInWithGoogle() async {
     try {
+      // Check network connectivity first
+      final hasConnection = await NetworkUtils.hasInternetConnection();
+      if (!hasConnection) {
+        _setError(NetworkUtils.getAuthNetworkErrorMessage());
+        return false;
+      }
+      
       // Don't set loading state here, let the auth state listener handle it
       // _setLoading(); // Commented out to prevent splash screen loop
       
@@ -157,7 +217,8 @@ class AuthProvider extends ChangeNotifier {
       _clearError();
       return true;
     } catch (e) {
-      _setError(e.toString());
+      // Use user-friendly error message
+      _setError(NetworkUtils.getUserFriendlyAuthError(e.toString()));
       return false;
     }
   }
@@ -169,18 +230,26 @@ class AuthProvider extends ChangeNotifier {
       await _authService.signOut();
       _clearError();
     } catch (e) {
-      _setError(e.toString());
+      _setError(NetworkUtils.getUserFriendlyAuthError(e.toString()));
     }
   }
 
   // Reset password
   Future<bool> resetPassword(String email) async {
     try {
+      // Check network connectivity first
+      final hasConnection = await NetworkUtils.hasInternetConnection();
+      if (!hasConnection) {
+        _setError(NetworkUtils.getAuthNetworkErrorMessage());
+        return false;
+      }
+      
       await _authService.resetPassword(email);
       _clearError();
       return true;
     } catch (e) {
-      _setError(e.toString());
+      // Use user-friendly error message
+      _setError(NetworkUtils.getUserFriendlyAuthError(e.toString()));
       return false;
     }
   }
@@ -188,11 +257,18 @@ class AuthProvider extends ChangeNotifier {
   // Send email verification
   Future<bool> sendEmailVerification() async {
     try {
+      // Check network connectivity first
+      final hasConnection = await NetworkUtils.hasInternetConnection();
+      if (!hasConnection) {
+        _setError(NetworkUtils.getAuthNetworkErrorMessage());
+        return false;
+      }
+      
       await _authService.sendEmailVerification();
       _clearError();
       return true;
     } catch (e) {
-      _setError(e.toString());
+      _setError(NetworkUtils.getUserFriendlyAuthError(e.toString()));
       return false;
     }
   }
@@ -207,7 +283,7 @@ class AuthProvider extends ChangeNotifier {
       }
       return isVerified;
     } catch (e) {
-      _setError(e.toString());
+      _setError(NetworkUtils.getUserFriendlyAuthError(e.toString()));
       return false;
     }
   }
@@ -231,7 +307,7 @@ class AuthProvider extends ChangeNotifier {
       _clearError();
       return true;
     } catch (e) {
-      _setError(e.toString());
+      _setError(NetworkUtils.getUserFriendlyAuthError(e.toString()));
       return false;
     }
   }
@@ -243,7 +319,7 @@ class AuthProvider extends ChangeNotifier {
       _clearError();
       return true;
     } catch (e) {
-      _setError(e.toString());
+      _setError(NetworkUtils.getUserFriendlyAuthError(e.toString()));
       return false;
     }
   }

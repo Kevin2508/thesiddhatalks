@@ -1,251 +1,313 @@
-import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
-import 'package:cached_network_image/cached_network_image.dart';
-import '../utils/app_colors.dart';
-import '../models/youtube_models.dart';
-import '../screens/player_screen.dart';
-import 'watchlist_button.dart';
+// import 'package:flutter/material.dart';
+// import 'package:flutter/services.dart';
+// import 'package:google_fonts/google_fonts.dart';
+// import 'package:cached_network_image/cached_network_image.dart';
+// import '../utils/app_colors.dart';
+// import '../models/video_models.dart';
+// import '../screens/player_screen.dart';
 
-class LiveStreamBanner extends StatelessWidget {
-  final LiveStream liveStream;
-  final VoidCallback? onTap;
+// class LiveStreamBanner extends StatefulWidget {
+//   const LiveStreamBanner({Key? key}) : super(key: key);
 
-  const LiveStreamBanner({
-    Key? key,
-    required this.liveStream,
-    this.onTap,
-  }) : super(key: key);
+//   @override
+//   State<LiveStreamBanner> createState() => _LiveStreamBannerState();
+// }
 
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap ?? () => _playLiveStream(context),
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: liveStream.isLive
-                ? [
-              Colors.red.withOpacity(0.1),
-              Colors.red.withOpacity(0.05),
-            ]
-                : [
-              AppColors.primaryAccent.withOpacity(0.1),
-              AppColors.primaryAccent.withOpacity(0.05),
-            ],
-          ),
-          border: Border.all(
-            color: liveStream.isLive
-                ? Colors.red.withOpacity(0.3)
-                : AppColors.primaryAccent.withOpacity(0.3),
-            width: 1,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: liveStream.isLive
-                  ? Colors.red.withOpacity(0.1)
-                  : AppColors.primaryAccent.withOpacity(0.1),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Stack(
-          children: [
-            Row(
-              children: [
-                // Thumbnail
-                ClipRRect(
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(15),
-                    bottomLeft: Radius.circular(15),
-                  ),
-                  child: CachedNetworkImage(
-                    imageUrl: liveStream.thumbnailUrl,
-                    width: 120,
-                    height: 80,
-                    fit: BoxFit.cover,
-                    placeholder: (context, url) => Container(
-                      width: 120,
-                      height: 80,
-                      color: AppColors.cardBackground,
-                      child: Center(
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(
-                            AppColors.primaryAccent,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
+// class _LiveStreamBannerState extends State<LiveStreamBanner>
+//     with TickerProviderStateMixin {
+//   Video? _liveStream;
+//   bool _isLoading = true;
 
-                // Content
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Status badge
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: liveStream.isLive
-                                    ? Colors.red
-                                    : AppColors.primaryAccent,
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  if (liveStream.isLive) ...[
-                                    Container(
-                                      width: 6,
-                                      height: 6,
-                                      decoration: BoxDecoration(
-                                        color: Colors.white,
-                                        shape: BoxShape.circle,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 4),
-                                  ],
-                                  Text(
-                                    liveStream.statusText,
-                                    style: GoogleFonts.lato(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const Spacer(),
-                            // Watchlist button
-                            WatchlistButton(
-                              video: liveStream.toYouTubeVideo(),
-                              size: 16,
-                            ),
-                            const SizedBox(width: 8),
-                            Icon(
-                              Icons.play_circle_fill,
-                              color: liveStream.isLive
-                                  ? Colors.red
-                                  : AppColors.primaryAccent,
-                              size: 20,
-                            ),
-                          ],
-                        ),
+//   late AnimationController _pulseController;
+//   late AnimationController _shimmerController;
+//   late Animation<double> _pulseAnimation;
+//   late Animation<double> _shimmerAnimation;
 
-                        const SizedBox(height: 8),
+//   @override
+//   void initState() {
+//     super.initState();
+//     _setupAnimations();
+//     _checkForLiveStream();
+//   }
 
-                        // Title
-                        Text(
-                          liveStream.title,
-                          style: GoogleFonts.lato(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.textPrimary,
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
+//   void _setupAnimations() {
+//     _pulseController = AnimationController(
+//       duration: const Duration(seconds: 2),
+//       vsync: this,
+//     );
 
-                        const SizedBox(height: 4),
+//     _shimmerController = AnimationController(
+//       duration: const Duration(seconds: 1),
+//       vsync: this,
+//     );
 
-                        // Time and viewers
-                        Row(
-                          children: [
-                            Icon(
-                              liveStream.isLive
-                                  ? Icons.visibility
-                                  : Icons.schedule,
-                              size: 12,
-                              color: AppColors.textSecondary,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              liveStream.isLive
-                                  ? liveStream.viewerText
-                                  : liveStream.timeText,
-                              style: GoogleFonts.lato(
-                                fontSize: 12,
-                                color: AppColors.textSecondary,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
+//     _pulseAnimation = Tween<double>(
+//       begin: 1.0,
+//       end: 1.1,
+//     ).animate(CurvedAnimation(
+//       parent: _pulseController,
+//       curve: Curves.easeInOut,
+//     ));
 
-            // Pulse animation for live streams
-            if (liveStream.isLive)
-              Positioned(
-                top: 8,
-                left: 8,
-                child: _buildPulseAnimation(),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
+//     _shimmerAnimation = Tween<double>(
+//       begin: -1.0,
+//       end: 1.0,
+//     ).animate(CurvedAnimation(
+//       parent: _shimmerController,
+//       curve: Curves.easeInOut,
+//     ));
 
-  Widget _buildPulseAnimation() {
-    return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0.0, end: 1.0),
-      duration: const Duration(seconds: 2),
-      builder: (context, value, child) {
-        return Container(
-          width: 12,
-          height: 12,
-          decoration: BoxDecoration(
-            color: Colors.red.withOpacity(1.0 - value),
-            shape: BoxShape.circle,
-          ),
-        );
-      },
-      onEnd: () {
-        // Animation will restart automatically due to TweenAnimationBuilder
-      },
-    );
-  }
+//     _pulseController.repeat(reverse: true);
+//     _shimmerController.repeat();
+//   }
 
-  void _playLiveStream(BuildContext context) {
-    // Convert LiveStream to YouTubeVideo for compatibility
-    final video = YouTubeVideo(
-      id: liveStream.id,
-      title: liveStream.title,
-      description: liveStream.description,
-      thumbnailUrl: liveStream.thumbnailUrl,
-      channelTitle: liveStream.channelTitle,
-      publishedAt: liveStream.publishedAt,
-      duration: liveStream.isLive ? 'LIVE' : '0:00',
-      viewCount: liveStream.viewCount,
-      likeCount: liveStream.likeCount,
-      isNew: liveStream.isUpcoming || liveStream.isLive,
-    );
+//   void _checkForLiveStream() async {
+//     // TODO: Check Firestore for active live streams
+//     // For now, simulate no live stream
+//     setState(() {
+//       _liveStream = null;
+//       _isLoading = false;
+//     });
+//   }
 
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => PlayerScreen(video: video),
-      ),
-    );
-  }
-}
+//   @override
+//   void dispose() {
+//     _pulseController.dispose();
+//     _shimmerController.dispose();
+//     super.dispose();
+//   }
+
+//   @override
+//   Widget build(BuildContext context) {
+//     if (_isLoading) {
+//       return _buildLoadingBanner();
+//     }
+
+//     if (_liveStream == null) {
+//       return const SizedBox.shrink(); // No live stream, hide banner
+//     }
+
+//     return _buildLiveBanner(_liveStream!);
+//   }
+
+//   Widget _buildLoadingBanner() {
+//     return Container(
+//       height: 60,
+//       margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+//       decoration: BoxDecoration(
+//         color: AppColors.cardBackground,
+//         borderRadius: BorderRadius.circular(12),
+//         boxShadow: [
+//           BoxShadow(
+//             color: AppColors.shadowLight,
+//             blurRadius: 8,
+//             offset: const Offset(0, 2),
+//           ),
+//         ],
+//       ),
+//       child: AnimatedBuilder(
+//         animation: _shimmerAnimation,
+//         builder: (context, child) {
+//           return Container(
+//             decoration: BoxDecoration(
+//               borderRadius: BorderRadius.circular(12),
+//               gradient: LinearGradient(
+//                 begin: Alignment.topLeft,
+//                 end: Alignment.bottomRight,
+//                 colors: [
+//                   AppColors.cardBackground,
+//                   AppColors.surfaceBackground,
+//                   AppColors.cardBackground,
+//                 ],
+//                 stops: [
+//                   (_shimmerAnimation.value - 0.3).clamp(0.0, 1.0),
+//                   _shimmerAnimation.value.clamp(0.0, 1.0),
+//                   (_shimmerAnimation.value + 0.3).clamp(0.0, 1.0),
+//                 ],
+//               ),
+//             ),
+//           );
+//         },
+//       ),
+//     );
+//   }
+
+//   Widget _buildLiveBanner(Video liveStream) {
+//     return GestureDetector(
+//       onTap: () => _playLiveStream(liveStream),
+//       child: Container(
+//         margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+//         decoration: BoxDecoration(
+//           gradient: LinearGradient(
+//             begin: Alignment.topLeft,
+//             end: Alignment.bottomRight,
+//             colors: [
+//               Colors.red.shade600,
+//               Colors.red.shade700,
+//             ],
+//           ),
+//           borderRadius: BorderRadius.circular(12),
+//           boxShadow: [
+//             BoxShadow(
+//               color: Colors.red.withOpacity(0.3),
+//               blurRadius: 15,
+//               offset: const Offset(0, 5),
+//             ),
+//           ],
+//         ),
+//         child: ClipRRect(
+//           borderRadius: BorderRadius.circular(12),
+//           child: Stack(
+//             children: [
+//               // Background pattern
+//               Positioned.fill(
+//                 child: CustomPaint(
+//                   painter: LivePatternPainter(),
+//                 ),
+//               ),
+
+//               // Content
+//               Padding(
+//                 padding: const EdgeInsets.all(16),
+//                 child: Row(
+//                   children: [
+//                     // Live indicator
+//                     AnimatedBuilder(
+//                       animation: _pulseAnimation,
+//                       builder: (context, child) {
+//                         return Transform.scale(
+//                           scale: _pulseAnimation.value,
+//                           child: Container(
+//                             width: 12,
+//                             height: 12,
+//                             decoration: const BoxDecoration(
+//                               color: Colors.white,
+//                               shape: BoxShape.circle,
+//                             ),
+//                           ),
+//                         );
+//                       },
+//                     ),
+
+//                     const SizedBox(width: 12),
+
+//                     // Live text
+//                     Container(
+//                       padding: const EdgeInsets.symmetric(
+//                         horizontal: 8,
+//                         vertical: 4,
+//                       ),
+//                       decoration: BoxDecoration(
+//                         color: Colors.white.withOpacity(0.2),
+//                         borderRadius: BorderRadius.circular(6),
+//                       ),
+//                       child: Text(
+//                         'LIVE',
+//                         style: GoogleFonts.rajdhani(
+//                           fontSize: 12,
+//                           fontWeight: FontWeight.bold,
+//                           color: Colors.white,
+//                           letterSpacing: 1.2,
+//                         ),
+//                       ),
+//                     ),
+
+//                     const SizedBox(width: 16),
+
+//                     // Stream info
+//                     Expanded(
+//                       child: Column(
+//                         crossAxisAlignment: CrossAxisAlignment.start,
+//                         children: [
+//                           Text(
+//                             liveStream.title,
+//                             style: GoogleFonts.lato(
+//                               fontSize: 16,
+//                               fontWeight: FontWeight.bold,
+//                               color: Colors.white,
+//                             ),
+//                             maxLines: 1,
+//                             overflow: TextOverflow.ellipsis,
+//                           ),
+//                           Text(
+//                             'Tap to join live stream',
+//                             style: GoogleFonts.lato(
+//                               fontSize: 12,
+//                               color: Colors.white.withOpacity(0.9),
+//                             ),
+//                           ),
+//                         ],
+//                       ),
+//                     ),
+
+//                     // Play button
+//                     Container(
+//                       width: 40,
+//                       height: 40,
+//                       decoration: BoxDecoration(
+//                         color: Colors.white.withOpacity(0.2),
+//                         shape: BoxShape.circle,
+//                       ),
+//                       child: const Icon(
+//                         Icons.play_arrow,
+//                         color: Colors.white,
+//                         size: 20,
+//                       ),
+//                     ),
+//                   ],
+//                 ),
+//               ),
+//             ],
+//           ),
+//         ),
+//       ),
+//     );
+//   }
+
+//   void _playLiveStream(Video liveStream) {
+//     HapticFeedback.mediumImpact();
+//     Navigator.push(
+//       context,
+//       MaterialPageRoute(
+//         builder: (context) => PlayerScreen(video: liveStream),
+//       ),
+//     );
+//   }
+// }
+
+// class LivePatternPainter extends CustomPainter {
+//   @override
+//   void paint(Canvas canvas, Size size) {
+//     final paint = Paint()
+//       ..color = Colors.white.withOpacity(0.1)
+//       ..style = PaintingStyle.fill;
+
+//     // Create subtle wave pattern
+//     final path = Path();
+//     path.moveTo(0, size.height * 0.7);
+    
+//     for (double x = 0; x <= size.width; x += 20) {
+//       final y = size.height * 0.7 + 
+//                (size.height * 0.1) * 
+//                (0.5 + 0.5 * (x / size.width));
+//       path.lineTo(x, y);
+//     }
+    
+//     path.lineTo(size.width, size.height);
+//     path.lineTo(0, size.height);
+//     path.close();
+
+//     canvas.drawPath(path, paint);
+
+//     // Add dots pattern
+//     paint.color = Colors.white.withOpacity(0.05);
+//     for (double x = 10; x < size.width; x += 25) {
+//       for (double y = 10; y < size.height; y += 15) {
+//         canvas.drawCircle(Offset(x, y), 1, paint);
+//       }
+//     }
+//   }
+
+//   @override
+//   bool shouldRepaint(LivePatternPainter oldDelegate) => false;
+// }

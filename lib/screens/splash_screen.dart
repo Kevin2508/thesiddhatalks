@@ -3,8 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../utils/app_colors.dart';
 import '../providers/auth_provider.dart';
-import '../services/auth_service.dart';
-import '../services/app_initialization_service.dart';
+import '../models/auth_status.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({Key? key}) : super(key: key);
@@ -70,33 +69,27 @@ class _SplashScreenState extends State<SplashScreen>
   }
 
   void _initializeAppData() async {
-    try {
-      print('🚀 Starting app data initialization...');
-      final success = await AppInitializationService.initializeAppIfNeeded();
-      
-      if (success) {
-        print('✅ App data initialization completed');
-      } else {
-        print('❌ App data initialization failed - will show sync screen');
-      }
-    } catch (e) {
-      print('❌ App data initialization failed: $e');
-      // Continue anyway - user can manually refresh later
-    }
+    // Background initialization - data will be loaded when needed
   }
 
   void _checkAuthAndNavigate() {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     
+    print('SplashScreen: Checking auth status: ${authProvider.status}');
+    print('SplashScreen: Current user: ${authProvider.user?.email}');
+    
     // Check auth status and navigate accordingly
     switch (authProvider.status) {
       case AuthStatus.authenticated:
+        print('SplashScreen: User is authenticated, navigating to home');
         Navigator.of(context).pushReplacementNamed('/home');
         break;
       case AuthStatus.unauthenticated:
+        print('SplashScreen: User is not authenticated, navigating to login');
         Navigator.of(context).pushReplacementNamed('/login');
         break;
       case AuthStatus.loading:
+        print('SplashScreen: Auth still loading, waiting...');
         // If still loading, wait a bit more and check again
         Future.delayed(const Duration(milliseconds: 1000), () {
           if (mounted) {

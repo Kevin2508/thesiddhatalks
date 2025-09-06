@@ -2,61 +2,82 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../utils/app_colors.dart';
 import '../models/video_models.dart';
-import '../services/firestore_recently_played_service.dart';
+import '../services/firestore_video_service.dart';
 import 'watchlist_button.dart';
 
-class RecentlyPlayedSection extends StatefulWidget {
-  final VoidCallback? onRefresh;
-  final VoidCallback? onVideoPlayed;
+class NewMeditationTechniquesSection extends StatefulWidget {
+  final Function(Video)? onVideoTap;
   
-  const RecentlyPlayedSection({
+  const NewMeditationTechniquesSection({
     Key? key, 
-    this.onRefresh,
-    this.onVideoPlayed,
+    this.onVideoTap,
   }) : super(key: key);
 
   @override
-  State<RecentlyPlayedSection> createState() => _RecentlyPlayedSectionState();
+  State<NewMeditationTechniquesSection> createState() => _NewMeditationTechniquesSectionState();
 }
 
-class _RecentlyPlayedSectionState extends State<RecentlyPlayedSection> {
-  List<Video> _recentVideos = [];
+class _NewMeditationTechniquesSectionState extends State<NewMeditationTechniquesSection> {
+  List<Video> _meditationVideos = [];
   bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _loadRecentlyPlayedVideos();
+    _loadMeditationVideos();
   }
 
-  Future<void> _loadRecentlyPlayedVideos() async {
+  Future<void> _loadMeditationVideos() async {
     setState(() {
       _isLoading = true;
     });
     
     try {
-      final videos = await FirestoreRecentlyPlayedService.getRecentlyPlayedVideos();
+      // Fetch videos from Firestore and filter for meditation category
+      final allVideos = await FirestoreVideoService.fetchAllVideos();
+      final meditationVideos = allVideos
+          .where((video) => 
+              video.category.toLowerCase().contains('meditation') ||
+              video.titleEnglish.toLowerCase().contains('meditation') ||
+              video.titleHindi.toLowerCase().contains('ध्यान') ||
+              video.titleHindi.toLowerCase().contains('meditation'))
+          .take(10) // Limit to 10 videos
+          .map((firestoreVideo) => Video(
+            id: firestoreVideo.id.toString(),
+            title: firestoreVideo.titleEnglish.isNotEmpty 
+                ? firestoreVideo.titleEnglish 
+                : firestoreVideo.titleHindi,
+            description: firestoreVideo.titleHindi.isNotEmpty 
+                ? firestoreVideo.titleHindi 
+                : firestoreVideo.titleEnglish,
+            thumbnailUrl: firestoreVideo.thumbnail.isNotEmpty 
+                ? firestoreVideo.thumbnail 
+                : 'https://via.placeholder.com/200x120?text=Meditation+Video',
+            duration: firestoreVideo.duration,
+            publishedAt: firestoreVideo.publishedAt,
+            channelTitle: 'Siddha Kutumbakam',
+            pcloudUrl: firestoreVideo.pcloudLink,
+            youtubeUrl: firestoreVideo.youtubeUrl,
+          ))
+          .toList();
+
       setState(() {
-        _recentVideos = videos;
+        _meditationVideos = meditationVideos;
         _isLoading = false;
       });
     } catch (e) {
-      print('Error loading recently played videos: $e');
+      print('Error loading meditation videos: $e');
       setState(() {
-        _recentVideos = [];
+        _meditationVideos = [];
         _isLoading = false;
       });
     }
-    
-    // Call parent refresh callback if provided
-    if (widget.onRefresh != null) {
-      widget.onRefresh!();
-    }
   }
 
-  // Method to refresh from external calls
-  Future<void> refresh() async {
-    await _loadRecentlyPlayedVideos();
+  void _playVideo(Video video) {
+    if (widget.onVideoTap != null) {
+      widget.onVideoTap!(video);
+    }
   }
 
   @override
@@ -65,7 +86,7 @@ class _RecentlyPlayedSectionState extends State<RecentlyPlayedSection> {
       return _buildSkeletonLoading();
     }
 
-    if (_recentVideos.isEmpty) {
+    if (_meditationVideos.isEmpty) {
       return const SizedBox.shrink();
     }
 
@@ -77,13 +98,13 @@ class _RecentlyPlayedSectionState extends State<RecentlyPlayedSection> {
           child: Row(
             children: [
               Icon(
-                Icons.history,
+                Icons.play_arrow,
                 color: AppColors.primaryAccent,
                 size: 22,
               ),
               const SizedBox(width: 8),
               Text(
-                'Recently Played',
+                'Latest Meditation Practices',
                 style: GoogleFonts.rajdhani(
                   fontSize: 20,
                   fontWeight: FontWeight.bold,
@@ -94,30 +115,30 @@ class _RecentlyPlayedSectionState extends State<RecentlyPlayedSection> {
           ),
         ),
         const SizedBox(height: 15),
-        _buildRecentVideosList(),
+        _buildMeditationVideosList(),
       ],
     );
   }
 
-  Widget _buildRecentVideosList() {
+  Widget _buildMeditationVideosList() {
     return SizedBox(
-      height: 250, // Increased height to match other sections
+      height: 220, // Increased to match card height
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 20),
-        itemCount: _recentVideos.length,
+        itemCount: _meditationVideos.length,
         itemBuilder: (context, index) {
-          final video = _recentVideos[index];
-          return _buildRecentVideoCard(video);
+          final video = _meditationVideos[index];
+          return _buildMeditationVideoCard(video);
         },
       ),
     );
   }
 
-  Widget _buildRecentVideoCard(Video video) {
+  Widget _buildMeditationVideoCard(Video video) {
     return Container(
       width: 250,
-      height: 240, // Increased height for better title visibility
+      height: 100, // Increased height for better title visibility
       margin: const EdgeInsets.only(right: 16),
       child: Material(
         color: Colors.transparent,
@@ -165,27 +186,23 @@ class _RecentlyPlayedSectionState extends State<RecentlyPlayedSection> {
                           ),
                         ),
                       ),
-                      // Recently played indicator
+                      // New meditation indicator
                       Positioned(
                         top: 8,
                         left: 8,
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
-                            color: Colors.black.withOpacity(0.7),
+                            color: AppColors.primaryAccent.withOpacity(0.9),
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(
-                                Icons.history,
-                                color: Colors.white,
-                                size: 12,
-                              ),
+                              
                               const SizedBox(width: 2),
                               Text(
-                                'RECENT',
+                                'NEW',
                                 style: GoogleFonts.lato(
                                   fontSize: 10,
                                   fontWeight: FontWeight.bold,
@@ -254,6 +271,7 @@ class _RecentlyPlayedSectionState extends State<RecentlyPlayedSection> {
                           maxLines: 3,
                           overflow: TextOverflow.ellipsis,
                         ),
+                       
                       ],
                     ),
                   ),
@@ -272,18 +290,28 @@ class _RecentlyPlayedSectionState extends State<RecentlyPlayedSection> {
       children: [
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20),
-          child: Container(
-            width: 150,
-            height: 18,
-            decoration: BoxDecoration(
-              color: AppColors.textSecondary.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(4),
-            ),
+          child: Row(
+            children: [
+              Icon(
+                Icons.self_improvement,
+                color: AppColors.primaryAccent,
+                size: 22,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'New Meditation Techniques',
+                style: GoogleFonts.rajdhani(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+            ],
           ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 15),
         SizedBox(
-          height: 220,
+          height: 250, // Match the updated list height
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -291,7 +319,7 @@ class _RecentlyPlayedSectionState extends State<RecentlyPlayedSection> {
             itemBuilder: (context, index) {
               return Container(
                 width: 250,
-                height: 100,
+                height: 240, // Match card height
                 margin: const EdgeInsets.only(right: 16),
                 decoration: BoxDecoration(
                   color: AppColors.cardBackground,
@@ -300,7 +328,7 @@ class _RecentlyPlayedSectionState extends State<RecentlyPlayedSection> {
                 child: Column(
                   children: [
                     Container(
-                      height: 140,
+                      height: 140, // Fixed thumbnail height
                       decoration: BoxDecoration(
                         color: AppColors.textSecondary.withOpacity(0.1),
                         borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
@@ -329,6 +357,15 @@ class _RecentlyPlayedSectionState extends State<RecentlyPlayedSection> {
                                 borderRadius: BorderRadius.circular(7),
                               ),
                             ),
+                            const SizedBox(height: 8),
+                            Container(
+                              height: 12,
+                              width: 100,
+                              decoration: BoxDecoration(
+                                color: AppColors.textSecondary.withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                            ),
                           ],
                         ),
                       ),
@@ -339,24 +376,7 @@ class _RecentlyPlayedSectionState extends State<RecentlyPlayedSection> {
             },
           ),
         ),
-        const SizedBox(height: 24),
       ],
-    );
-  }
-
-  void _playVideo(Video video) {
-    // Add to recently played when video is accessed
-    FirestoreRecentlyPlayedService.addRecentlyPlayedVideo(video);
-
-    // Call parent callback if provided
-    if (widget.onVideoPlayed != null) {
-      widget.onVideoPlayed!();
-    }
-
-    Navigator.pushNamed(
-      context,
-      '/player',
-      arguments: video,
     );
   }
 }

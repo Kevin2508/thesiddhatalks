@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../utils/app_colors.dart';
-import '../models/youtube_models.dart';
+import '../models/video_models.dart';
 import '../services/watchlist_service.dart';
+import '../services/auth_service.dart';
 
 class WatchlistButton extends StatefulWidget {
-  final YouTubeVideo video;
+  final Video video;
   final double size;
   final Color? color;
   final VoidCallback? onToggle;
@@ -48,7 +49,10 @@ class _WatchlistButtonState extends State<WatchlistButton>
   }
 
   Future<void> _checkWatchlistStatus() async {
-    final isInWatchlist = await WatchlistService.isInWatchlist(widget.video.id);
+    final user = AuthService().currentUser;
+    if (user == null) return;
+    
+    final isInWatchlist = await WatchlistService.isInWatchlist(user.uid, widget.video);
     if (mounted) {
       setState(() {
         _isInWatchlist = isInWatchlist;
@@ -72,9 +76,11 @@ class _WatchlistButtonState extends State<WatchlistButton>
     });
 
     bool success = false;
+    final user = AuthService().currentUser;
+    if (user == null) return;
     
     if (_isInWatchlist) {
-      success = await WatchlistService.removeFromWatchlist(widget.video.id);
+      success = await WatchlistService.removeFromWatchlist(user.uid, widget.video);
       if (success && mounted) {
         setState(() {
           _isInWatchlist = false;

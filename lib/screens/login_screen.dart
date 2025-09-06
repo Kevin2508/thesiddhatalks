@@ -3,13 +3,14 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import '../services/auth_service.dart';
 import '../utils/app_colors.dart';
 import '../providers/auth_provider.dart';
+import '../models/auth_status.dart';
 import '../widgets/custom_text_field.dart';
 import '../widgets/custom_button.dart';
 import '../widgets/loading_overlay.dart';
 import '../widgets/forgot_password_dialog.dart';
+import '../widgets/network_aware_error_widget.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({Key? key}) : super(key: key);
@@ -105,7 +106,10 @@ class _LoginScreenState extends State<LoginScreen>
                               const SizedBox(height: 32),
                               _buildSignUpSection(),
                               if (authProvider.errorMessage != null)
-                                _buildErrorMessage(authProvider.errorMessage!),
+                                NetworkAwareErrorWidget(
+                                  error: authProvider.errorMessage!,
+                                  onRetry: () => _handleLogin(authProvider),
+                                ),
                             ],
                           ),
                         ),
@@ -294,39 +298,6 @@ class _LoginScreenState extends State<LoginScreen>
                 fontSize: 14,
                 color: AppColors.primaryAccent,
                 fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildErrorMessage(String error) {
-    return Container(
-      margin: const EdgeInsets.only(top: 16),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: AppColors.error.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: AppColors.error.withOpacity(0.3),
-        ),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            Icons.error_outline,
-            color: AppColors.error,
-            size: 20,
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              error,
-              style: GoogleFonts.lato(
-                fontSize: 14,
-                color: AppColors.error,
               ),
             ),
           ),

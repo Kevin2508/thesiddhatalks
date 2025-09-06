@@ -3,9 +3,10 @@ import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import '../providers/auth_provider.dart';
-import '../services/auth_service.dart';
 import '../utils/app_colors.dart';
 import '../models/user_model.dart';
+import '../models/auth_status.dart';
+
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({Key? key}) : super(key: key);
@@ -267,23 +268,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           value: user.phoneNumber!,
                         ),
                       
-                      _buildInfoCard(
-                        icon: Icons.calendar_today_outlined,
-                        title: 'Member Since',
-                        value: _formatDate(user.createdAt),
-                      ),
-                      
-                      _buildInfoCard(
-                        icon: Icons.login_outlined,
-                        title: 'Last Login',
-                        value: _formatDate(user.lastLoginAt),
-                      ),
-                      
                       const SizedBox(height: 32),
-                      
-                      // Actions Section
-                      _buildSectionHeader('Actions'),
-                      const SizedBox(height: 16),
                       
                       // Send Email Verification (if not verified)
                       if (!user.isEmailVerified)
@@ -439,24 +424,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       color: Colors.white.withOpacity(0.9),
                     ),
                   ),
-                  
-                  // Warning banner
-                  Container(
-                    margin: const EdgeInsets.only(top: 8),
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.orange,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      'Firestore Data Unavailable',
-                      style: GoogleFonts.lato(
-                        fontSize: 12,
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
                 ],
               ),
             ),
@@ -474,47 +441,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Warning Message
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.orange.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.orange.withOpacity(0.3)),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(Icons.warning, color: Colors.orange, size: 20),
-                          const SizedBox(width: 8),
-                          Text(
-                            'Firestore Access Issue',
-                            style: GoogleFonts.rajdhani(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.orange.shade800,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Unable to access Firestore data. This is likely a database permissions issue. Showing Firebase Auth data instead.',
-                        style: GoogleFonts.lato(
-                          fontSize: 14,
-                          color: Colors.orange.shade700,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                
-                const SizedBox(height: 24),
-                
                 // Account Information Section
-                _buildSectionHeader('Firebase Auth Information'),
+                _buildSectionHeader('Account Information'),
                 const SizedBox(height: 16),
                 
                 _buildInfoCard(
@@ -542,43 +470,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     title: 'Phone Number',
                     value: firebaseUser.phoneNumber!,
                   ),
-                
-                _buildInfoCard(
-                  icon: Icons.fingerprint_outlined,
-                  title: 'User ID',
-                  value: firebaseUser.uid,
-                ),
-                
-                if (firebaseUser.metadata.creationTime != null)
-                  _buildInfoCard(
-                    icon: Icons.calendar_today_outlined,
-                    title: 'Account Created',
-                    value: _formatDate(firebaseUser.metadata.creationTime!),
-                  ),
-                
-                if (firebaseUser.metadata.lastSignInTime != null)
-                  _buildInfoCard(
-                    icon: Icons.login_outlined,
-                    title: 'Last Sign In',
-                    value: _formatDate(firebaseUser.metadata.lastSignInTime!),
-                  ),
-                
-                const SizedBox(height: 32),
-                
-                // Actions Section
-                _buildSectionHeader('Actions'),
-                const SizedBox(height: 16),
-                
-                // Retry Firestore
-                _buildActionButton(
-                  icon: Icons.refresh_outlined,
-                  title: 'Retry Firestore Access',
-                  subtitle: 'Try to reconnect to database',
-                  onTap: () async {
-                    await authProvider.refreshUserData();
-                  },
-                  color: Colors.blue,
-                ),
                 
                 const SizedBox(height: 32),
                 
@@ -776,15 +667,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
       ),
     );
-  }
-
-  String _formatDate(DateTime date) {
-    final months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
-    ];
-    
-    return '${months[date.month - 1]} ${date.day}, ${date.year}';
   }
 
   void _showLogoutDialog(BuildContext context, AuthProvider authProvider) {

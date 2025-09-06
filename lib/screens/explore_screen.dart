@@ -1,14 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_launcher_icons/xml_templates.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:shimmer/shimmer.dart';
 import '../utils/app_colors.dart';
-import '../utils/transliteration_utils.dart';
-import '../models/youtube_models.dart';
-import '../services/optimized_youtube_service.dart';
-import '../services/app_initialization_service.dart';
-import 'player_screen.dart';
+import '../models/video_models.dart';
+import '../services/firestore_video_service.dart';
+import 'hybrid_player_screen.dart';
 
 class ExploreScreen extends StatefulWidget {
   const ExploreScreen({Key? key}) : super(key: key);
@@ -21,23 +20,18 @@ class _ExploreScreenState extends State<ExploreScreen>
     with TickerProviderStateMixin {
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
-  final OptimizedYouTubeService _youtubeService = OptimizedYouTubeService();
   late AnimationController _fadeController;
 
-  // Session-level cache to prevent repeated loading
-  static List<String>? _sessionCategories;
-  static List<YouTubeVideo>? _sessionAllVideos;
-  static Map<String, List<YouTubeVideo>>? _sessionCategorizedVideos;
-
   String _selectedCategory = 'All';
-  List<YouTubeVideo> _allVideos = [];
-  List<YouTubeVideo> _filteredVideos = [];
-  Map<String, List<YouTubeVideo>> _categorizedVideos = {};
+  String _searchQuery = '';
+  List<Video> _allVideos = [];
+  List<Video> _filteredVideos = [];
+  Map<String, List<Video>> _categorizedVideos = {};
   List<String> _categories = ['All'];
   List<String> _searchSuggestions = [];
   bool _showSuggestions = false;
 
-  bool _isLoading = true;
+  bool _isLoading = false;
   bool _isSearching = false;
   String? _error;
 
@@ -49,7 +43,7 @@ class _ExploreScreenState extends State<ExploreScreen>
       vsync: this,
     );
 
-    _checkInitializationAndLoad();
+    _loadFirestoreData();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
@@ -58,257 +52,149 @@ class _ExploreScreenState extends State<ExploreScreen>
     });
   }
 
-  void _checkInitializationAndLoad() async {
-    // Check if app is initialized in current session
-    if (AppInitializationService.isSessionInitialized) {
-      print('✅ Session already initialized');
+  Future<void> _loadFirestoreData() async {
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+
+    try {
+      // Fetch all videos from Firestore
+      final allFirestoreVideos = await FirestoreVideoService.fetchAllVideos();
       
-      // Check if we have session-cached data
-      if (_sessionCategories != null && 
-          _sessionAllVideos != null && 
-          _sessionCategorizedVideos != null) {
-        print('📱 Using session-cached explore data (no Firebase calls)');
-        if (mounted) {
-          setState(() {
-            _categories = List.from(_sessionCategories!);
-            _allVideos = List.from(_sessionAllVideos!);
-            _filteredVideos = List.from(_sessionAllVideos!);
-            _categorizedVideos = Map.from(_sessionCategorizedVideos!);
-            _isLoading = false;
-          });
+      if (allFirestoreVideos.isEmpty) {
+        setState(() {
+          _allVideos = [];
+          _filteredVideos = [];
+          _categorizedVideos = {};
+          _categories = ['All'];
+          _isLoading = false;
+        });
+        return;
+      }
+
+      // Convert Firestore videos to Video models and categorize them
+      final List<Video> videoList = [];
+      final Map<String, List<Video>> categorizedVideos = {};
+      final Set<String> categorySet = {'All'};
+
+      for (final firestoreVideo in allFirestoreVideos) {
+        final video = Video(
+          id: firestoreVideo.id.toString(),
+          title: firestoreVideo.titleEnglish.isNotEmpty 
+              ? firestoreVideo.titleEnglish 
+              : firestoreVideo.titleHindi,
+          description: firestoreVideo.titleHindi.isNotEmpty 
+              ? firestoreVideo.titleHindi 
+              : firestoreVideo.titleEnglish,
+          thumbnailUrl: firestoreVideo.thumbnail.isNotEmpty 
+              ? firestoreVideo.thumbnail 
+              : 'https://via.placeholder.com/200x120?text=Video+Thumbnail',
+          duration: firestoreVideo.duration,
+          viewCount: 1000, // Default view count
+          likeCount: 50,   // Default like count
+          publishedAt: firestoreVideo.publishedAt,
+          channelTitle: 'Siddha Kutumbakam',
+          pcloudUrl: firestoreVideo.pcloudLink,
+          youtubeUrl: firestoreVideo.youtubeUrl,
+        );
+
+        videoList.add(video);
+
+        // Categorize videos
+        final category = firestoreVideo.category.isNotEmpty 
+            ? firestoreVideo.category 
+            : 'General';
+        
+        categorySet.add(category);
+        
+        if (!categorizedVideos.containsKey(category)) {
+          categorizedVideos[category] = [];
         }
-        print('📱 Session cache restored: ${_allVideos.length} videos, ${_categories.length} categories');
-      } else {
-        print('🔥 Loading explore data from Firebase and caching to session');
-        await _loadDataFromCacheAndStore();
+        categorizedVideos[category]!.add(video);
       }
-    } else {
-      print('⚠️ Session not initialized, initializing app first');
-      await _initializeAppAndLoad();
-    }
-  }
 
-  /// Initialize app data and then load explore screen data
-  Future<void> _initializeAppAndLoad() async {
-    try {
       setState(() {
-        _isLoading = true;
-        _error = null;
-      });
-
-      print('🚀 Initializing app for the first time...');
-      final success = await AppInitializationService.initializeAppIfNeeded();
-      
-      if (success) {
-        print('✅ App initialization successful, loading explore data');
-        await _loadDataFromCacheAndStore();
-      } else {
-        print('❌ App initialization failed');
-        setState(() {
-          _error = 'Failed to initialize app data. Please check your internet connection.';
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      print('❌ Error during app initialization: $e');
-      setState(() {
-        _error = 'Failed to load data: $e';
+        _allVideos = videoList;
+        _filteredVideos = videoList;
+        _categorizedVideos = categorizedVideos;
+        _categories = categorySet.toList()..sort();
         _isLoading = false;
       });
-    }
-  }
-
-  /// Load data from Firebase cache and store in session cache (only called once per session)
-  Future<void> _loadDataFromCacheAndStore() async {
-    try {
-      setState(() {
-        _isLoading = true;
-        _error = null;
-      });
-
-      print('🔍 Loading explore page data from Firebase cache (one-time per session)...');
-      final stopwatch = Stopwatch()..start();
-
-      // Use optimized loading method
-      final result = await _youtubeService.loadExplorePageData();
-
-      // Store in session cache
-      _sessionCategories = result['categories'] as List<String>;
-      _sessionAllVideos = result['allVideos'] as List<YouTubeVideo>;
-
-      if (mounted) {
-        setState(() {
-          _categories = List.from(_sessionCategories!);
-          _allVideos = List.from(_sessionAllVideos!);
-          _filteredVideos = List.from(_sessionAllVideos!);
-          _isLoading = false;
-        });
-      }
-      print('🔥 Data loaded from cache: ${_allVideos.length} videos, ${_categories.length} categories');
-
-      // Categorize videos and store in session cache
-      _categorizeVideos();
-      _sessionCategorizedVideos = Map.from(_categorizedVideos);
-
-      stopwatch.stop();
-      print('✅ Explore page loaded and cached in ${stopwatch.elapsedMilliseconds}ms');
-      print('📊 Cached ${_categories.length} categories with ${_allVideos.length} videos');
 
     } catch (e) {
-      print('❌ Error loading explore data from Firebase cache: $e');
       setState(() {
-        _error = e.toString();
+        _allVideos = [];
+        _filteredVideos = [];
+        _categorizedVideos = {};
+        _categories = ['All'];
         _isLoading = false;
+        _error = 'Failed to load videos: ${e.toString()}';
       });
-    }
-  }
-
-  /// Load data with initialization checks (used for manual refresh)
-  Future<void> _loadData() async {
-    try {
-      setState(() {
-        _isLoading = true;
-        _error = null;
-      });
-
-      print('🔍 Manual refresh - loading explore page data...');
-      final stopwatch = Stopwatch()..start();
-
-      // Use optimized loading method
-      final result = await _youtubeService.loadExplorePageData();
-
-      setState(() {
-        _categories = result['categories'] as List<String>;
-        _allVideos = result['allVideos'] as List<YouTubeVideo>;
-        _filteredVideos = result['allVideos'] as List<YouTubeVideo>;
-        _isLoading = false;
-      });
-
-      // Categorize videos
-      _categorizeVideos();
-
-      stopwatch.stop();
-      print('✅ Explore page refreshed in ${stopwatch.elapsedMilliseconds}ms (from cache)');
-      print('📊 Loaded ${_categories.length} categories with ${_allVideos.length} videos');
-
-    } catch (e) {
-      print('❌ Error in manual refresh: $e');
-      setState(() {
-        _error = e.toString();
-        _isLoading = false;
-      });
-    }
-  }
-
-  void _categorizeVideos() {
-    _categorizedVideos.clear();
-    
-    for (final video in _allVideos) {
-      final category = VideoCategory.categorizeVideo(video.title, video.description);
-      if (!_categorizedVideos.containsKey(category)) {
-        _categorizedVideos[category] = [];
-      }
-      _categorizedVideos[category]!.add(video);
     }
   }
 
   Future<void> _searchVideos(String query) async {
-    if (query.trim().isEmpty) {
-      _filterContent('');
-      return;
-    }
-
     setState(() {
+      _searchQuery = query.trim();
       _isSearching = true;
     });
 
-    try {
-      // First try remote search
-      final searchResults = await _youtubeService.searchChannelVideos(
-        query,
-        limit: 30,
-      );
-
-      // Enhance with local transliteration-based search
-      final localResults = _allVideos.where((video) {
-        return TransliterationUtils.matchesSearch(video.title, query) ||
-               TransliterationUtils.matchesSearch(video.description, query);
-      }).toList();
-
-      // Combine and deduplicate results
-      final combinedResults = <YouTubeVideo>[];
-      final seenIds = <String>{};
-
-      // Add remote results first (they're usually more relevant)
-      for (final video in searchResults) {
-        if (!seenIds.contains(video.id)) {
-          combinedResults.add(video);
-          seenIds.add(video.id);
-        }
-      }
-
-      // Add local transliteration matches
-      for (final video in localResults) {
-        if (!seenIds.contains(video.id)) {
-          combinedResults.add(video);
-          seenIds.add(video.id);
-        }
-      }
-
-      setState(() {
-        _filteredVideos = combinedResults;
-        _isSearching = false;
-      });
-
-      print('🔍 Search completed: "${query}" found ${combinedResults.length} results');
-      print('   - Remote: ${searchResults.length}, Local: ${localResults.length}');
+    if (_searchQuery.isEmpty) {
+      // Reset to show all videos or current category
+      _filterByCategory(_selectedCategory);
+    } else {
+      // Filter videos based on search query
+      List<Video> searchResults;
       
-    } catch (e) {
-      print('❌ Remote search failed, using local transliteration search: $e');
-      setState(() {
-        _isSearching = false;
-      });
-      // Fall back to enhanced local search with transliteration
-      _filterContentWithTransliteration(query);
-    }
-  }
-
-  void _filterContent(String query) {
-    setState(() {
-      if (query.isEmpty && _selectedCategory == 'All') {
-        _filteredVideos = _allVideos;
+      if (_selectedCategory == 'All') {
+        searchResults = _allVideos.where((video) =>
+            video.title.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+            video.description.toLowerCase().contains(_searchQuery.toLowerCase())
+        ).toList();
       } else {
-        List<YouTubeVideo> videosToFilter = _selectedCategory == 'All'
-            ? _allVideos
-            : _categorizedVideos[_selectedCategory] ?? [];
-
-        if (query.isEmpty) {
-          _filteredVideos = videosToFilter;
-        } else {
-          // Use enhanced transliteration-based filtering
-          _filteredVideos = videosToFilter.where((video) {
-            return TransliterationUtils.matchesSearch(video.title, query) ||
-                   TransliterationUtils.matchesSearch(video.description, query) ||
-                   TransliterationUtils.matchesSearch(video.channelTitle, query);
-          }).toList();
-        }
+        final categoryVideos = _categorizedVideos[_selectedCategory] ?? [];
+        searchResults = categoryVideos.where((video) =>
+            video.title.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+            video.description.toLowerCase().contains(_searchQuery.toLowerCase())
+        ).toList();
       }
+
+      setState(() {
+        _filteredVideos = searchResults;
+      });
+    }
+
+    setState(() {
+      _isSearching = false;
     });
   }
 
-  void _filterContentWithTransliteration(String query) {
+  void _filterByCategory(String category) {
     setState(() {
-      List<YouTubeVideo> videosToFilter = _selectedCategory == 'All'
-          ? _allVideos
-          : _categorizedVideos[_selectedCategory] ?? [];
-
-      _filteredVideos = videosToFilter.where((video) {
-        return TransliterationUtils.matchesSearch(video.title, query) ||
-               TransliterationUtils.matchesSearch(video.description, query) ||
-               TransliterationUtils.matchesSearch(video.channelTitle, query);
-      }).toList();
-      
-      print('🔍 Local transliteration search: "${query}" found ${_filteredVideos.length} results');
+      _selectedCategory = category;
+      if (category == 'All') {
+        // Apply search filter to all videos
+        if (_searchQuery.isEmpty) {
+          _filteredVideos = List.from(_allVideos);
+        } else {
+          _filteredVideos = _allVideos.where((video) =>
+              video.title.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+              video.description.toLowerCase().contains(_searchQuery.toLowerCase())
+          ).toList();
+        }
+      } else {
+        // Filter by category and apply search
+        final categoryVideos = _categorizedVideos[category] ?? [];
+        if (_searchQuery.isEmpty) {
+          _filteredVideos = List.from(categoryVideos);
+        } else {
+          _filteredVideos = categoryVideos.where((video) =>
+              video.title.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+              video.description.toLowerCase().contains(_searchQuery.toLowerCase())
+          ).toList();
+        }
+      }
     });
   }
 
@@ -329,10 +215,7 @@ class _ExploreScreenState extends State<ExploreScreen>
         resizeToAvoidBottomInset: true,
         body: SafeArea(
           child: RefreshIndicator(
-            onRefresh: () async {
-              await _youtubeService.forceRefresh();
-              await _loadData();
-            },
+            onRefresh: _loadFirestoreData,
             child: SingleChildScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
               child: Column(
@@ -369,21 +252,8 @@ class _ExploreScreenState extends State<ExploreScreen>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'Explore',
-                      style: GoogleFonts.teko(
-                        fontSize: 32,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                    Text(
-                      'Discover spiritual teachings and wisdom',
-                      style: GoogleFonts.lato(
-                        fontSize: 16,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
+                    
+                    
                   ],
                 ),
               ),
@@ -413,21 +283,11 @@ class _ExploreScreenState extends State<ExploreScreen>
                 controller: _searchController,
                 focusNode: _searchFocusNode,
                 onChanged: (query) {
-                  // Update suggestions
-                  if (query.isNotEmpty) {
-                    setState(() {
-                      _searchSuggestions = TransliterationUtils.getSearchSuggestions(
-                        query, 
-                        _allVideos.map((v) => v.title).toList()
-                      );
-                      _showSuggestions = _searchSuggestions.isNotEmpty;
-                    });
-                  } else {
-                    setState(() {
-                      _showSuggestions = false;
-                      _searchSuggestions = [];
-                    });
-                  }
+                  // TODO: Implement search suggestions with Firestore data
+                  setState(() {
+                    _showSuggestions = false;
+                    _searchSuggestions = [];
+                  });
 
                   // Debounce search
                   Future.delayed(const Duration(milliseconds: 500), () {
@@ -435,7 +295,7 @@ class _ExploreScreenState extends State<ExploreScreen>
                       if (query.isNotEmpty) {
                         _searchVideos(query);
                       } else {
-                        _filterContent('');
+                        _searchVideos('');
                       }
                     }
                   });
@@ -452,7 +312,7 @@ class _ExploreScreenState extends State<ExploreScreen>
                   fontSize: 16,
                 ),
                 decoration: InputDecoration(
-                  hintText: 'Search teachings... (Hindi/English supported)',
+                  hintText: 'Search teachings',
                   hintStyle: GoogleFonts.lato(
                     color: AppColors.textSecondary,
                     fontSize: 14,
@@ -472,7 +332,7 @@ class _ExploreScreenState extends State<ExploreScreen>
                           ),
                           onPressed: () {
                             _searchController.clear();
-                            _filterContent('');
+                            _searchVideos('');
                             setState(() {
                               _showSuggestions = false;
                               _searchSuggestions = [];
@@ -480,22 +340,7 @@ class _ExploreScreenState extends State<ExploreScreen>
                             _searchFocusNode.unfocus();
                           },
                         ),
-                      Container(
-                        margin: const EdgeInsets.only(right: 8),
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: AppColors.primaryAccent.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          'हिंदी',
-                          style: GoogleFonts.lato(
-                            fontSize: 10,
-                            color: AppColors.primaryAccent,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
+                      
                     ],
                   ),
                   filled: true,
@@ -618,10 +463,7 @@ class _ExploreScreenState extends State<ExploreScreen>
             child: GestureDetector(
               onTap: () {
                 HapticFeedback.lightImpact();
-                setState(() {
-                  _selectedCategory = category;
-                });
-                _filterContent(_searchController.text);
+                _filterByCategory(category);
               },
               child: Container(
                 padding: const EdgeInsets.symmetric(
@@ -856,7 +698,7 @@ class _ExploreScreenState extends State<ExploreScreen>
     );
   }
 
-  String _getCategoryForVideo(YouTubeVideo video) {
+  String _getCategoryForVideo(Video video) {
     for (final entry in _categorizedVideos.entries) {
       if (entry.value.any((v) => v.id == video.id)) {
         return entry.key;
@@ -900,10 +742,7 @@ class _ExploreScreenState extends State<ExploreScreen>
           ElevatedButton(
             onPressed: () {
               _searchController.clear();
-              setState(() {
-                _selectedCategory = 'All';
-              });
-              _filterContent('');
+              _filterByCategory('All');
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primaryAccent,
@@ -950,8 +789,7 @@ class _ExploreScreenState extends State<ExploreScreen>
             const SizedBox(height: 24),
             ElevatedButton(
               onPressed: () async {
-                await _youtubeService.forceRefresh();
-                await _loadData();
+                // TODO: Implement retry with Firestore data
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primaryAccent,
@@ -965,11 +803,14 @@ class _ExploreScreenState extends State<ExploreScreen>
     );
   }
 
-  void _playVideo(YouTubeVideo video) {
+  void _playVideo(Video video) {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => PlayerScreen(video: video),
+        builder: (context) => HybridPlayerScreen(
+          video: video,
+          pcloudUrl: video.pcloudUrl.isNotEmpty ? video.pcloudUrl : video.youtubeUrl,
+        ),
       ),
     );
   }
@@ -984,7 +825,7 @@ class _ExploreScreenState extends State<ExploreScreen>
 }
 
 class ExploreVideoCard extends StatefulWidget {
-  final YouTubeVideo video;
+  final Video video;
   final String category;
   final int animationDelay;
   final VoidCallback onTap;
@@ -1159,49 +1000,9 @@ class _ExploreVideoCardState extends State<ExploreVideoCard>
                                     ),
                                   ),
 
-                                  const SizedBox(height: 4),
 
                                   // Stats row - more compact
-                                  Row(
-                                    children: [
-                                      Icon(
-                                        Icons.visibility,
-                                        size: 12,
-                                        color: AppColors.textSecondary,
-                                      ),
-                                      const SizedBox(width: 3),
-                                      Expanded(
-                                        child: Text(
-                                          _formatViewCount(widget.video.viewCount),
-                                          style: GoogleFonts.lato(
-                                            fontSize: 11,
-                                            color: AppColors.textSecondary,
-                                            fontWeight: FontWeight.w500,
-                                          ),
-                                        ),
-                                      ),
-                                      // Duration - smaller and more compact
-                                      if (widget.video.duration.isNotEmpty)
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 4,
-                                            vertical: 1,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: AppColors.textSecondary.withOpacity(0.1),
-                                            borderRadius: BorderRadius.circular(3),
-                                          ),
-                                          child: Text(
-                                            widget.video.duration,
-                                            style: GoogleFonts.lato(
-                                              fontSize: 9,
-                                              color: AppColors.textSecondary,
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                          ),
-                                        ),
-                                    ],
-                                  ),
+                                  
                                 ],
                               ),
                             ),
@@ -1243,48 +1044,40 @@ class _ExploreVideoCardState extends State<ExploreVideoCard>
                 ),
               ),
             ),
-            errorWidget: (context, url, error) => Container(
-              color: AppColors.cardBackground,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.error_outline,
-                    color: AppColors.textSecondary,
-                    size: 24,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Image\nUnavailable',
-                    style: GoogleFonts.lato(
-                      fontSize: 10,
-                      color: AppColors.textSecondary,
+            errorWidget: (context, url, error) {
+              return Container(
+                color: AppColors.cardBackground,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.transparent,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.play_circle_filled,
+                        color: AppColors.textSecondary,
+                        size: 32,
+                      ),
                     ),
-                    textAlign: TextAlign.center,
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          // Play button overlay with better visibility
-          Center(
-            child: Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.7),
-                borderRadius: BorderRadius.circular(40),
-                border: Border.all(
-                  color: Colors.white.withOpacity(0.3),
-                  width: 2,
+                    const SizedBox(height: 8),
+                    
+                  ],
                 ),
-              ),
-              child: const Icon(
-                Icons.play_arrow,
-                color: Colors.white,
-                size: 28,
-              ),
-            ),
+              );
+            },
+            imageBuilder: (context, imageProvider) {
+              return Container(
+                decoration: BoxDecoration(
+                  image: DecorationImage(
+                    image: imageProvider,
+                    fit: BoxFit.cover,
+                  ),
+                ),
+              );
+            },
           ),
 
           // Duration badge (moved to bottom-right for better UX)
@@ -1312,50 +1105,11 @@ class _ExploreVideoCardState extends State<ExploreVideoCard>
               ),
             ),
 
-          // New badge
-          if (widget.video.isNew)
-            Positioned(
-              top: 8,
-              left: 8,
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 8,
-                  vertical: 4,
-                ),
-                decoration: BoxDecoration(
-                  color: AppColors.primaryAccent,
-                  borderRadius: BorderRadius.circular(8),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppColors.primaryAccent.withOpacity(0.3),
-                      blurRadius: 4,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: Text(
-                  'NEW',
-                  style: GoogleFonts.lato(
-                    fontSize: 10,
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ),
-        ],
+          // Note: 'isNew' property removed - was part of YouTube model
+          // if (widget.video.isNew)
+           ],
       ),
     );
-  }
-
-  String _formatViewCount(int viewCount) {
-    if (viewCount >= 1000000) {
-      return '${(viewCount / 1000000).toStringAsFixed(1)}M views';
-    } else if (viewCount >= 1000) {
-      return '${(viewCount / 1000).toStringAsFixed(1)}K views';
-    } else {
-      return '$viewCount views';
-    }
   }
 
   @override

@@ -3,12 +3,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user_model.dart';
-
-enum AuthStatus {
-  authenticated,
-  unauthenticated,
-  loading,
-}
+import '../models/auth_status.dart';
 
 class AuthService {
   static final AuthService _instance = AuthService._internal();
@@ -29,8 +24,22 @@ class AuthService {
 
   // Initialize Firebase Auth
   Future<void> initialize() async {
-    await _auth.setPersistence(Persistence.LOCAL);
+    try {
+      await _auth.setPersistence(Persistence.LOCAL);
+      print('AuthService: Persistence set to LOCAL');
+      
+      // Give Firebase Auth a moment to restore the auth state
+      await Future.delayed(const Duration(milliseconds: 500));
+      
+      print('AuthService: Initialization complete');
+    } catch (e) {
+      print('AuthService: Initialization error: $e');
+      // Continue anyway
+    }
   }
+
+  // Check if user is currently signed in
+  bool get isSignedIn => _auth.currentUser != null;
 
   // Sign up with email and password
   Future<UserCredential?> signUpWithEmailPassword({

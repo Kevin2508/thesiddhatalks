@@ -131,11 +131,32 @@ class _GreetingSectionState extends State<GreetingSection>
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final timeGreeting = _getTimeBasedGreeting();
     
+    // First try to get display name from Firestore user data
     final displayName = authProvider.user?.displayName;
     if (displayName != null && displayName.isNotEmpty) {
       return '$timeGreeting, $displayName';
     }
     
+    // If Firestore user data is not available, try Firebase user data
+    final firebaseUser = authProvider.firebaseUser;
+    if (firebaseUser != null) {
+      final firebaseDisplayName = firebaseUser.displayName;
+      if (firebaseDisplayName != null && firebaseDisplayName.isNotEmpty) {
+        return '$timeGreeting, $firebaseDisplayName';
+      }
+      
+      // Extract name from Firebase user email if display name is not available
+      final firebaseEmail = firebaseUser.email;
+      if (firebaseEmail != null && firebaseEmail.isNotEmpty) {
+        final emailName = firebaseEmail.split('@')[0];
+        if (emailName.isNotEmpty) {
+          final capitalizedName = emailName[0].toUpperCase() + emailName.substring(1);
+          return '$timeGreeting, $capitalizedName';
+        }
+      }
+    }
+    
+    // Fallback to Firestore user email if available
     final email = authProvider.user?.email;
     if (email != null && email.isNotEmpty) {
       // Extract name from email (before @)
@@ -163,7 +184,7 @@ class _GreetingSectionState extends State<GreetingSection>
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.only(top: 5, bottom: 20, left: 20, right: 20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -236,15 +257,7 @@ class _GreetingSectionState extends State<GreetingSection>
                                 color: AppColors.textSecondary,
                               ),
                             ),
-                            if (_dailyQuoteImages.isNotEmpty)
-                              Text(
-                                _dailyQuoteImages[_currentImageIndex]['title']!,
-                                style: GoogleFonts.lato(
-                                  fontSize: 12,
-                                  color: AppColors.primaryAccent,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
+                            
                           ],
                         ),
                       ),

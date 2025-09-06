@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shimmer/shimmer.dart';
 import '../utils/app_colors.dart';
-import '../models/youtube_models.dart';
+import '../models/video_models.dart';
 import '../services/watchlist_service.dart';
 import '../services/recently_played_service.dart';
+import '../services/auth_service.dart';
 
 class WatchlistScreen extends StatefulWidget {
   const WatchlistScreen({Key? key}) : super(key: key);
@@ -16,7 +17,7 @@ class WatchlistScreen extends StatefulWidget {
 class _WatchlistScreenState extends State<WatchlistScreen>
     with SingleTickerProviderStateMixin {
   late AnimationController _animationController;
-  List<YouTubeVideo> _watchlistVideos = [];
+  List<Video> _watchlistVideos = [];
   bool _isLoading = true;
   String? _error;
 
@@ -37,6 +38,15 @@ class _WatchlistScreenState extends State<WatchlistScreen>
         _error = null;
       });
 
+      final user = AuthService().currentUser;
+      if (user == null) {
+        setState(() {
+          _error = 'User not authenticated';
+          _isLoading = false;
+        });
+        return;
+      }
+
       final videos = await WatchlistService.getWatchlistVideos();
       
       setState(() {
@@ -53,8 +63,11 @@ class _WatchlistScreenState extends State<WatchlistScreen>
     }
   }
 
-  Future<void> _removeFromWatchlist(YouTubeVideo video) async {
-    final success = await WatchlistService.removeFromWatchlist(video.id);
+  Future<void> _removeFromWatchlist(Video video) async {
+    final user = AuthService().currentUser;
+    if (user == null) return;
+    
+    final success = await WatchlistService.removeFromWatchlist(user.uid, video);
     if (success) {
       setState(() {
         _watchlistVideos.removeWhere((v) => v.id == video.id);
@@ -72,7 +85,7 @@ class _WatchlistScreenState extends State<WatchlistScreen>
     }
   }
 
-  void _playVideo(YouTubeVideo video) {
+  void _playVideo(Video video) {
     RecentlyPlayedService.addRecentlyPlayedVideo(video);
     Navigator.pushNamed(
       context,
@@ -206,7 +219,7 @@ class _WatchlistScreenState extends State<WatchlistScreen>
     );
   }
 
-  Widget _buildWatchlistVideoCard(YouTubeVideo video) {
+  Widget _buildWatchlistVideoCard(Video video) {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(

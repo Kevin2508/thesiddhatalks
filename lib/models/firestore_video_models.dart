@@ -60,21 +60,20 @@ class FirestoreVideo {
 
   // Helper method to check if video data is complete
   static bool _checkAvailability(Map<String, dynamic> data) {
-    final requiredFields = [
-      'Title_in_English',
-      'Title_in_Hindi', 
-      'PCLOUD_LINK',
-      'Category'
-    ];
+    // Very lenient availability check - only require basic fields
+    final bool hasId = data['id'] != null;
+    final bool hasCategory = data['Category'] != null && 
+                           data['Category'].toString().isNotEmpty;
     
-    for (String field in requiredFields) {
-      if (data[field] == null || 
-          data[field].toString().isEmpty || 
-          data[field].toString().toLowerCase() == 'not available') {
-        return false;
-      }
-    }
-    return true;
+    // At least one title should be present
+    final bool hasEnglishTitle = data['Title_in_English'] != null && 
+                               data['Title_in_English'].toString().isNotEmpty;
+    final bool hasHindiTitle = data['Title_in_Hindi'] != null && 
+                             data['Title_in_Hindi'].toString().isNotEmpty;
+    final bool hasAnyTitle = hasEnglishTitle || hasHindiTitle;
+    
+    // Only require ID, category, and at least one title
+    return hasId && hasCategory && hasAnyTitle;
   }
 
   // Helper method to format duration from ISO 8601 format

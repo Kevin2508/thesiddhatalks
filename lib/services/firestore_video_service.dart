@@ -10,15 +10,35 @@ class FirestoreVideoService {
     try {
       final QuerySnapshot snapshot = await _firestore
           .collection(_videosCollection)
-          .orderBy('id')
           .get();
       
-      return snapshot.docs
-          .map((doc) => FirestoreVideo.fromFirestore(doc.data() as Map<String, dynamic>))
-          .toList();
+      final List<FirestoreVideo> videos = [];
+      
+      for (var doc in snapshot.docs) {
+        try {
+          final data = doc.data() as Map<String, dynamic>;
+          final video = FirestoreVideo.fromFirestore(data);
+          
+          // Only add videos that pass availability check
+          if (video.isAvailable) {
+            videos.add(video);
+          }
+        } catch (e) {
+          // Skip videos that can't be processed
+          continue;
+        }
+      }
+      
+      return videos;
     } catch (e) {
-      print('Error fetching videos: $e');
-      return [];
+      // Check for specific permission error
+      if (e.toString().contains('permission-denied') || e.toString().contains('PERMISSION_DENIED')) {
+        throw Exception('Permission denied: Please check Firestore security rules for the "videos" collection');
+      } else if (e.toString().contains('unavailable') || e.toString().contains('UNAVAILABLE')) {
+        throw Exception('Firestore service unavailable: Please check your internet connection');
+      } else {
+        throw Exception('Failed to load videos: ${e.toString()}');
+      }
     }
   }
 
@@ -28,7 +48,6 @@ class FirestoreVideoService {
       final QuerySnapshot snapshot = await _firestore
           .collection(_videosCollection)
           .where('Category', isEqualTo: category)
-          .orderBy('id')
           .get();
       
       return snapshot.docs

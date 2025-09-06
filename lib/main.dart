@@ -11,15 +11,16 @@ import 'widgets/auth_wrapper.dart';
 import 'screens/splash_screen.dart';
 import 'screens/initial_sync_screen.dart';
 import 'screens/home_screen.dart';
-import 'screens/player_screen.dart';
+import 'screens/hybrid_player_screen.dart';
 import 'screens/wisdom_screen.dart';
 import 'screens/explore_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/signup_screen.dart';
 import 'screens/profile_screen.dart';
 import 'screens/watchlist_screen.dart';
+import 'screens/donation_screen.dart';
 import 'utils/app_colors.dart';
-import 'models/youtube_models.dart';
+import 'models/video_models.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -30,10 +31,11 @@ void main() async {
       options: DefaultFirebaseOptions.currentPlatform,
     );
 
-    // Initialize Auth Service
-    await AuthService().initialize();
+    // Initialize Auth Service and wait for it to be ready
+    final authService = AuthService();
+    await authService.initialize();
 
-    print('Firebase initialized successfully');
+    print('Firebase and Auth Service initialized successfully');
   } catch (e) {
     print('Firebase initialization error: $e');
     // Continue anyway, but with error handling
@@ -181,10 +183,15 @@ class SiddhaTalkApp extends StatelessWidget {
             case '/main':
               return _createRoute(const MainScreen());
             case '/player':
-              final video = settings.arguments as YouTubeVideo?;
-              return _createRoute(PlayerScreen(video: video));
+              final video = settings.arguments as Video?;
+              return _createRoute(HybridPlayerScreen(
+                video: video,
+                pcloudUrl: video?.pcloudUrl.isNotEmpty == true ? video!.pcloudUrl : video?.youtubeUrl,
+              ));
             case '/profile':
               return _createRoute(const ProfileScreen());
+            case '/donation':
+              return _createRoute(const DonationScreen());
             default:
               return _createRoute(const SplashScreen());
           }
