@@ -194,9 +194,9 @@ class _GreetingSectionState extends State<GreetingSection>
             child: Text(
               _getGreetingWithUsername(context),
               style: GoogleFonts.rajdhani(
-                fontSize: 24,
+                fontSize: 22,
                 fontWeight: FontWeight.bold,
-                color: AppColors.textPrimary,
+                color: const Color.fromARGB(255, 105, 54, 26),
               ),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,

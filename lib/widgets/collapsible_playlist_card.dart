@@ -334,7 +334,22 @@ class _CollapsiblePlaylistCardState extends State<CollapsiblePlaylistCard>
                             ),
                           ),
                         ),
-                      
+                      if (video.duration.isNotEmpty) const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: AppColors.textSecondary.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(3),
+                        ),
+                        child: Text(
+                          _formatDate(video.publishedAt),
+                          style: GoogleFonts.lato(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w500,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                 ],
@@ -389,6 +404,27 @@ class _CollapsiblePlaylistCardState extends State<CollapsiblePlaylistCard>
       return '${(viewCount / 1000).toStringAsFixed(1)}K';
     } else {
       return viewCount.toString();
+    }
+  }
+
+  String _formatDate(DateTime date) {
+    final now = DateTime.now();
+    final difference = now.difference(date);
+    
+    if (difference.inDays > 365) {
+      final years = (difference.inDays / 365).floor();
+      return '${years}y ago';
+    } else if (difference.inDays > 30) {
+      final months = (difference.inDays / 30).floor();
+      return '${months}mo ago';
+    } else if (difference.inDays > 0) {
+      return '${difference.inDays}d ago';
+    } else if (difference.inHours > 0) {
+      return '${difference.inHours}h ago';
+    } else if (difference.inMinutes > 0) {
+      return '${difference.inMinutes}m ago';
+    } else {
+      return 'Just now';
     }
   }
 

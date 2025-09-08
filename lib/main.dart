@@ -19,6 +19,7 @@ import 'screens/signup_screen.dart';
 import 'screens/profile_screen.dart';
 import 'screens/watchlist_screen.dart';
 import 'screens/donation_screen.dart';
+import 'screens/recently_played_screen.dart';
 import 'utils/app_colors.dart';
 import 'models/video_models.dart';
 
@@ -192,6 +193,8 @@ class SiddhaTalkApp extends StatelessWidget {
               return _createRoute(const ProfileScreen());
             case '/donation':
               return _createRoute(const DonationScreen());
+            case '/recently-played':
+              return _createRoute(const RecentlyPlayedScreen());
             default:
               return _createRoute(const SplashScreen());
           }

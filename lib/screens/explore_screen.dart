@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_launcher_icons/xml_templates.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:shimmer/shimmer.dart';
@@ -682,7 +681,7 @@ class _ExploreScreenState extends State<ExploreScreen>
       shrinkWrap: true, // Allow grid to size itself
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 2,
-        childAspectRatio: 0.65, // Reduced from 0.7 to give more height for title display
+        childAspectRatio: 0.75, // Increased from 0.68 to 0.75 for much more height
         crossAxisSpacing: 16,
         mainAxisSpacing: 16,
       ),
@@ -947,17 +946,18 @@ class _ExploreVideoCardState extends State<ExploreVideoCard>
                         children: [
                           // Thumbnail
                           Expanded(
-                            flex: 3,
+                            flex: 2, // Increased from 4 to 5 for even more thumbnail space
                             child: _buildThumbnail(),
                           ),
 
-                          // Content - Better title display with more space
+                          // Content - Reduced content area significantly
                           Expanded(
-                            flex: 3, // Increased from 2 to 3 for more title space
+                            flex: 2, // Keep at 2 for minimal content space
                             child: Padding(
-                              padding: const EdgeInsets.all(12),
+                              padding: const EdgeInsets.all(8), // Reduced from 10 to 8
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min, // Prevent overflow
                                 children: [
                                   // Category badge - hide if it's "General" or empty
                                   if (widget.category != 'General' && widget.category.isNotEmpty)
@@ -982,24 +982,36 @@ class _ExploreVideoCardState extends State<ExploreVideoCard>
                                       ),
                                     ),
 
-                                  SizedBox(height: (widget.category != 'General' && widget.category.isNotEmpty) ? 6 : 0),
+                                  SizedBox(height: 6), // Reduced from 4 to 2
 
-                                  // Title - Much more space allocated with better line height
-                                  Expanded(
-                                    flex: 3, // Give title most of the space
+                                  // Title - Much smaller fixed height container
+                                  Container(
+                                    height: 32, // Reduced from 42 to 32
                                     child: Text(
                                       widget.video.title,
                                       style: GoogleFonts.lato(
-                                        fontSize: 13,
+                                        fontSize: 12, // Reduced from 12 to 11
                                         fontWeight: FontWeight.w600,
                                         color: AppColors.textPrimary,
-                                        height: 1.2, // Tighter line height for better space usage
+                                        height: 1.0, // Reduced from 1.1 to 1.0 for minimum spacing
                                       ),
-                                      maxLines: 4, // Allow up to 4 lines for longer titles
-                                      overflow: TextOverflow.ellipsis,
+                                      maxLines: 2, // Reduced from 3 to 2 lines
+                                      overflow: TextOverflow.ellipsis, // Ensure ellipsis when text overflows
                                     ),
                                   ),
 
+                                  const SizedBox(height: 2), // Reduced from 4 to 2
+
+                                  // Upload date - Fixed position at bottom
+                                  Text(
+                                    _formatDate(widget.video.publishedAt),
+                                    style: GoogleFonts.lato(
+                                      fontSize: 9, // Reduced from 10 to 9
+                                      color: AppColors.textSecondary,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
 
                                   // Stats row - more compact
                                   
@@ -1110,6 +1122,27 @@ class _ExploreVideoCardState extends State<ExploreVideoCard>
            ],
       ),
     );
+  }
+
+  String _formatDate(DateTime date) {
+    final now = DateTime.now();
+    final difference = now.difference(date);
+    
+    if (difference.inDays > 365) {
+      final years = (difference.inDays / 365).floor();
+      return '${years}y ago';
+    } else if (difference.inDays > 30) {
+      final months = (difference.inDays / 30).floor();
+      return '${months}mo ago';
+    } else if (difference.inDays > 0) {
+      return '${difference.inDays}d ago';
+    } else if (difference.inHours > 0) {
+      return '${difference.inHours}h ago';
+    } else if (difference.inMinutes > 0) {
+      return '${difference.inMinutes}m ago';
+    } else {
+      return 'Just now';
+    }
   }
 
   @override

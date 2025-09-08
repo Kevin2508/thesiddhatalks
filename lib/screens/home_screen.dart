@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:provider/provider.dart';
+import 'dart:io';
 import '../utils/app_colors.dart';
 import '../providers/auth_provider.dart';
 
@@ -207,61 +208,84 @@ class _HomeScreenState extends State<HomeScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.primaryBackground,
-      body: RefreshIndicator(
-        onRefresh: _refreshData,
-        color: AppColors.primaryAccent,
-        backgroundColor: AppColors.cardBackground,
-        child: CustomScrollView(
-          controller: _pageScrollController,
-          physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-          slivers: [
-            _buildAppBar(),
-            SliverToBoxAdapter(
-              child: AnimatedBuilder(
-                animation: _scrollController,
-                builder: (context, child) {
-                  return Transform.translate(
-                    offset: Offset(0, 20 * (1 - _scrollController.value)),
-                    child: Opacity(
-                      opacity: _scrollController.value,
-                      child: Column(
-                        children: [
-                          const GreetingSection(),
-                          RecentlyPlayedSection(
-                            key: _recentlyPlayedKey,
-                            onRefresh: () {
-                              // Recently played section refreshed
-                            },
-                          ),
-                          const SizedBox(height: 25),
-                          
-                          NewMeditationTechniquesSection(
-                            onVideoTap: _playVideo,
-                          ),
-
-                          
-                          const SizedBox(height: 25),
-                          
-                          RecommendedVideosSection(
-                            onVideoTap: _playVideo,
-                          ),
-                          const SizedBox(height: 25),
-                          
-                          _buildPlaylistsSection(),
-                          const SizedBox(height: 30),
-                          _buildYouTubeChannelsSection(),
-                          const SizedBox(height: 30),
-                          _buildSocialMediaSection(),
-                          const SizedBox(height: 30),
-                        ],
-                      ),
-                    ),
-                  );
-                },
+      body: Stack(
+        children: [
+          // Background image overlay
+          Positioned.fill(
+            child: Container(
+              decoration: const BoxDecoration(
+                image: DecorationImage(
+                  image: AssetImage('assets/images/home_bg_header.png'),
+                  
+                  alignment: Alignment.topCenter,
+                  opacity: 0.5,
+                ),
               ),
             ),
-          ],
-        ),
+          ),
+          // Content overlay
+          RefreshIndicator(
+            onRefresh: _refreshData,
+            color: AppColors.primaryAccent,
+            backgroundColor: AppColors.cardBackground,
+            child: CustomScrollView(
+              controller: _pageScrollController,
+              physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+              slivers: [
+                _buildAppBar(),
+                SliverToBoxAdapter(
+                  child: AnimatedBuilder(
+                    animation: _scrollController,
+                    builder: (context, child) {
+                      return Transform.translate(
+                        offset: Offset(0, 20 * (1 - _scrollController.value)),
+                        child: Opacity(
+                          opacity: _scrollController.value,
+                          child: Column(
+                            children: [
+                              const GreetingSection(),
+                              RecentlyPlayedSection(
+                                key: _recentlyPlayedKey,
+                                showAll: false, // Show only 3 videos on home screen
+                                onSeeAll: () {
+                                  // Navigate to the full recently played screen
+                                  Navigator.pushNamed(context, '/recently-played');
+                                },
+                                onRefresh: () {
+                                  // Recently played section refreshed
+                                },
+                              ),
+                              const SizedBox(height: 25),
+                              
+                              NewMeditationTechniquesSection(
+                                onVideoTap: _playVideo,
+                              ),
+
+                              
+                              const SizedBox(height: 25),
+                              
+                              RecommendedVideosSection(
+                                onVideoTap: _playVideo,
+                              ),
+                              const SizedBox(height: 25),
+                              
+                              _buildPlaylistsSection(),
+                              const SizedBox(height: 30),
+                              _buildYouTubeChannelsSection(),
+                              const SizedBox(height: 30),
+                              _buildSocialMediaSection(),
+                              const SizedBox(height: 30),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -271,27 +295,11 @@ class _HomeScreenState extends State<HomeScreen>
       expandedHeight: 0,
       floating: true,
       pinned: true,
-      backgroundColor: AppColors.primaryBackground.withOpacity(0.95),
+      backgroundColor: Colors.transparent,
       elevation: 0,
       flexibleSpace: FlexibleSpaceBar(
         background: Container(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [
-                AppColors.primaryAccent.withOpacity(0.1),
-                Colors.transparent,
-              ],
-            ),
-          ),
-          child: const SafeArea(
-            child: Padding(
-              padding: EdgeInsets.symmetric(horizontal: 20),
-              // HeroCard temporarily removed - was for YouTube live streams
-              // child: HeroCard(),
-            ),
-          ),
+          color: Colors.transparent,
         ),
       ),
       actions: [
@@ -341,10 +349,12 @@ class _HomeScreenState extends State<HomeScreen>
                   child: CircleAvatar(
                     radius: 16,
                     backgroundColor: AppColors.primaryAccent.withOpacity(0.1),
-                    backgroundImage: authProvider.user?.photoURL != null
-                        ? NetworkImage(authProvider.user!.photoURL!)
-                        : null,
-                    child: authProvider.user?.photoURL == null
+                    backgroundImage: authProvider.localProfilePicturePath != null
+                        ? FileImage(File(authProvider.localProfilePicturePath!))
+                        : authProvider.user?.photoURL != null
+                            ? NetworkImage(authProvider.user!.photoURL!)
+                            : null,
+                    child: (authProvider.localProfilePicturePath == null && authProvider.user?.photoURL == null)
                         ? Icon(
                       Icons.person,
                       size: 20,
@@ -375,7 +385,7 @@ class _HomeScreenState extends State<HomeScreen>
                 'All Playlists',
                 style: GoogleFonts.poppins(
                   color: AppColors.textPrimary,
-                  fontSize: 20,
+                  fontSize: 18,
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -591,6 +601,11 @@ class _HomeScreenState extends State<HomeScreen>
       decoration: BoxDecoration(
         color: AppColors.cardBackground,
         borderRadius: BorderRadius.circular(16),
+        image: const DecorationImage(
+          image: AssetImage('assets/images/follow_channel_bg.jpg'),
+          fit: BoxFit.cover,
+          opacity: 0.4,
+        ),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.05),

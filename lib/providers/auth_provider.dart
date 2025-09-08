@@ -1,5 +1,9 @@
 import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
+import 'dart:io';
 import '../services/auth_service.dart';
 import '../models/user_model.dart';
 import '../models/auth_status.dart';
@@ -7,19 +11,23 @@ import '../utils/network_utils.dart';
 
 class AuthProvider extends ChangeNotifier {
   final AuthService _authService = AuthService();
+  final ImagePicker _imagePicker = ImagePicker();
 
   AuthStatus _status = AuthStatus.loading;
   UserModel? _user;
   String? _errorMessage;
+  String? _localProfilePicturePath;
 
   AuthStatus get status => _status;
   UserModel? get user => _user;
   String? get errorMessage => _errorMessage;
+  String? get localProfilePicturePath => _localProfilePicturePath;
   bool get isAuthenticated => _status == AuthStatus.authenticated;
   User? get firebaseUser => _authService.currentUser;
 
   AuthProvider() {
     _initializeAuth();
+    _loadLocalProfilePicture();
   }
 
   void _initializeAuth() async {
@@ -77,11 +85,16 @@ class AuthProvider extends ChangeNotifier {
             }
             
             _status = AuthStatus.authenticated;
+            // Load local profile picture when user signs in
+            await _loadLocalProfilePicture();
             print('AuthProvider: User authenticated successfully. User data: ${_user?.email}');
           } else {
             print('AuthProvider: No user found, setting as unauthenticated');
             _user = null;
+            _localProfilePicturePath = null;
             _status = AuthStatus.unauthenticated;
+            // Clean up old profile pictures when user signs out
+            await _cleanupProfilePictures();
           }
         } catch (e) {
           print('AuthProvider: Error in auth state change: $e');
@@ -226,6 +239,8 @@ class AuthProvider extends ChangeNotifier {
   // Sign out
   Future<void> signOut() async {
     try {
+      // Clear local profile picture path
+      _localProfilePicturePath = null;
       // Don't set loading here, the auth state listener will handle the state change
       await _authService.signOut();
       _clearError();
@@ -343,5 +358,177 @@ class AuthProvider extends ChangeNotifier {
 
   void clearError() {
     _clearError();
+  }
+
+  // Local Profile Picture Management
+  
+  // Load local profile picture path from SharedPreferences
+  Future<void> _loadLocalProfilePicture() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final userId = firebaseUser?.uid;
+      if (userId != null) {
+        _localProfilePicturePath = prefs.getString('profile_picture_$userId');
+        // Check if the file still exists
+        if (_localProfilePicturePath != null) {
+          final file = File(_localProfilePicturePath!);
+          if (!await file.exists()) {
+            // File doesn't exist anymore, clear the path
+            _localProfilePicturePath = null;
+            await prefs.remove('profile_picture_$userId');
+          }
+        }
+        notifyListeners();
+      }
+    } catch (e) {
+      print('AuthProvider: Error loading local profile picture: $e');
+    }
+  }
+
+  // Pick and save profile picture from gallery
+  Future<bool> pickProfilePictureFromGallery() async {
+    try {
+      final XFile? image = await _imagePicker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 512,
+        maxHeight: 512,
+        imageQuality: 80,
+      );
+      
+      if (image != null) {
+        return await _saveProfilePicture(image);
+      }
+      return false;
+    } catch (e) {
+      _setError('Failed to pick image from gallery: $e');
+      return false;
+    }
+  }
+
+  // Pick and save profile picture from camera
+  Future<bool> pickProfilePictureFromCamera() async {
+    try {
+      final XFile? image = await _imagePicker.pickImage(
+        source: ImageSource.camera,
+        maxWidth: 512,
+        maxHeight: 512,
+        imageQuality: 80,
+      );
+      
+      if (image != null) {
+        return await _saveProfilePicture(image);
+      }
+      return false;
+    } catch (e) {
+      _setError('Failed to take picture: $e');
+      return false;
+    }
+  }
+
+  // Save the selected image to local storage
+  Future<bool> _saveProfilePicture(XFile image) async {
+    try {
+      final userId = firebaseUser?.uid;
+      if (userId == null) {
+        _setError('User not authenticated');
+        return false;
+      }
+
+      // Get application documents directory
+      final appDir = await getApplicationDocumentsDirectory();
+      final profilePicturesDir = Directory('${appDir.path}/profile_pictures');
+      
+      // Create directory if it doesn't exist
+      if (!await profilePicturesDir.exists()) {
+        await profilePicturesDir.create(recursive: true);
+      }
+
+      // Delete old profile picture if it exists
+      await _deleteOldProfilePicture(userId);
+
+      // Create new filename with timestamp to ensure uniqueness
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final extension = image.path.split('.').last;
+      final newPath = '${profilePicturesDir.path}/profile_${userId}_$timestamp.$extension';
+
+      // Copy the file to the new location
+      final File newFile = await File(image.path).copy(newPath);
+      
+      // Save path to SharedPreferences
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('profile_picture_$userId', newFile.path);
+      
+      _localProfilePicturePath = newFile.path;
+      notifyListeners();
+      _clearError();
+      return true;
+    } catch (e) {
+      _setError('Failed to save profile picture: $e');
+      return false;
+    }
+  }
+
+  // Delete old profile picture file
+  Future<void> _deleteOldProfilePicture(String userId) async {
+    try {
+      if (_localProfilePicturePath != null) {
+        final oldFile = File(_localProfilePicturePath!);
+        if (await oldFile.exists()) {
+          await oldFile.delete();
+        }
+      }
+    } catch (e) {
+      print('AuthProvider: Error deleting old profile picture: $e');
+    }
+  }
+
+  // Remove profile picture
+  Future<bool> removeProfilePicture() async {
+    try {
+      final userId = firebaseUser?.uid;
+      if (userId == null) {
+        _setError('User not authenticated');
+        return false;
+      }
+
+      // Delete the file
+      await _deleteOldProfilePicture(userId);
+      
+      // Remove from SharedPreferences
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('profile_picture_$userId');
+      
+      _localProfilePicturePath = null;
+      notifyListeners();
+      _clearError();
+      return true;
+    } catch (e) {
+      _setError('Failed to remove profile picture: $e');
+      return false;
+    }
+  }
+
+  // Clean up profile pictures for signed out user
+  Future<void> _cleanupProfilePictures() async {
+    try {
+      final appDir = await getApplicationDocumentsDirectory();
+      final profilePicturesDir = Directory('${appDir.path}/profile_pictures');
+      
+      if (await profilePicturesDir.exists()) {
+        final files = await profilePicturesDir.list().toList();
+        for (final file in files) {
+          if (file is File) {
+            // Clean up old files (older than 30 days)
+            final stat = await file.stat();
+            final age = DateTime.now().difference(stat.modified);
+            if (age.inDays > 30) {
+              await file.delete();
+            }
+          }
+        }
+      }
+    } catch (e) {
+      print('AuthProvider: Error cleaning up profile pictures: $e');
+    }
   }
 }

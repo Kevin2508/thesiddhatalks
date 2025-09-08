@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
+import 'dart:io';
 import '../providers/auth_provider.dart';
 import '../utils/app_colors.dart';
 import '../models/user_model.dart';
 import '../models/auth_status.dart';
+import 'profile_edit_screen.dart';
 
 
 class ProfileScreen extends StatefulWidget {
@@ -147,17 +149,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 expandedHeight: 280.0,
                 floating: false,
                 pinned: true,
-                backgroundColor: AppColors.primaryAccent,
+                backgroundColor: AppColors.primaryAccent.withOpacity(0.4),
                 flexibleSpace: FlexibleSpaceBar(
                   background: Container(
                     decoration: const BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          AppColors.primaryAccent,
-                          AppColors.secondaryAccent,
-                        ],
+                      image: DecorationImage(
+                        image: AssetImage('assets/images/profile_bg.jpg'),
+                        fit: BoxFit.cover,
+                        opacity: 0.7,
                       ),
                     ),
                     child: Column(
@@ -167,8 +166,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         
                         // Profile Picture
                         Container(
-                          width: 120,
-                          height: 120,
+                          width: 150,
+                          height: 150,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             border: Border.all(
@@ -186,10 +185,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           child: CircleAvatar(
                             radius: 56,
                             backgroundColor: Colors.white,
-                            backgroundImage: user.photoURL != null
-                                ? NetworkImage(user.photoURL!)
-                                : null,
-                            child: user.photoURL == null
+                            backgroundImage: authProvider.localProfilePicturePath != null
+                                ? FileImage(File(authProvider.localProfilePicturePath!))
+                                : user.photoURL != null
+                                    ? NetworkImage(user.photoURL!)
+                                    : null,
+                            child: (authProvider.localProfilePicturePath == null && user.photoURL == null)
                                 ? Icon(
                                     Icons.person,
                                     size: 60,
@@ -205,20 +206,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         Text(
                           user.displayName,
                           style: GoogleFonts.rajdhani(
-                            fontSize: 28,
+                            fontSize: 35,
                             fontWeight: FontWeight.bold,
                             color: Colors.white,
+                            shadows: [
+                              Shadow(
+                                offset: const Offset(2, 2),
+                                blurRadius: 4,
+                                color: Colors.black.withOpacity(0.5),
+                              ),
+                            ],
                           ),
                         ),
                         
                         // Email
-                        Text(
-                          user.email,
-                          style: GoogleFonts.lato(
-                            fontSize: 16,
-                            color: Colors.white.withOpacity(0.9),
-                          ),
-                        ),
+                        
                       ],
                     ),
                   ),
@@ -284,8 +286,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       _buildActionButton(
                         icon: Icons.edit_outlined,
                         title: 'Edit Profile',
-                        subtitle: 'Update your display name and other details',
-                        onTap: () => _showEditProfileDialog(context, authProvider, user),
+                        subtitle: 'Update your profile picture and other details',
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const ProfileEditScreen(),
+                            ),
+                          );
+                        },
                         color: AppColors.primaryAccent,
                       ),
                       
@@ -356,13 +365,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
           flexibleSpace: FlexibleSpaceBar(
             background: Container(
               decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    AppColors.primaryAccent,
-                    AppColors.secondaryAccent,
-                  ],
+                image: DecorationImage(
+                  image: AssetImage('assets/images/profile_bg.jpg'),
+                  fit: BoxFit.cover,
                 ),
               ),
               child: Column(
@@ -391,10 +396,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     child: CircleAvatar(
                       radius: 56,
                       backgroundColor: Colors.white,
-                      backgroundImage: firebaseUser.photoURL != null
-                          ? NetworkImage(firebaseUser.photoURL!)
-                          : null,
-                      child: firebaseUser.photoURL == null
+                      backgroundImage: authProvider.localProfilePicturePath != null
+                          ? FileImage(File(authProvider.localProfilePicturePath!))
+                          : firebaseUser.photoURL != null
+                              ? NetworkImage(firebaseUser.photoURL!)
+                              : null,
+                      child: (authProvider.localProfilePicturePath == null && firebaseUser.photoURL == null)
                           ? Icon(
                               Icons.person,
                               size: 60,
